@@ -1,0 +1,12 @@
+# python
+.venv/
+.python-version
+uv.lock
+
+# editors
+.vscode/
+.idea/
+
+# data
+data/
+out/

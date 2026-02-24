@@ -1,0 +1,15 @@
+[project]
+name = "tree"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "geopandas>=1.1.2",
+    "ipykernel>=7.2.0",
+    "matplotlib>=3.10.8",
+    "numpy>=2.2.6",
+    "pandas>=2.3.3",
+    "pandas-stubs~=2.3.3",
+    "utm>=0.8.1",
+]
