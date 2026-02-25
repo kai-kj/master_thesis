@@ -43,14 +43,14 @@ for label_type in "full", "part":
             continue
 
         paths.append((
-            str(label_type),
+            label_type == "full",
             str(image_dat_path),
             str(image_lab_path),
             str(image_loc_path),
             str(image_aux_path),
         ))
 
-paths = pd.DataFrame(paths, columns=["label_type", "x", "y", "world", "meta"])
+paths = pd.DataFrame(paths, columns=["is_fully_labeled", "x", "y", "world", "meta"])
 
 # %%
 
