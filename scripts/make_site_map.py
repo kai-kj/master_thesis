@@ -1,77 +1,54 @@
-# %%
+# %% imports
 
+import warnings
 from pathlib import Path
 import geopandas as gpd
 import matplotlib.pyplot as plt
 
-# %%
+warnings.filterwarnings("ignore")
 
-data_path = Path("data/treeai/summary.gpkg")
-assert data_path.exists()
+# %% setup
 
 countries_path = Path("data/naturalearth/ne_50m_admin_0_countries.zip")
 assert countries_path.exists()
 
-urbans_path = Path("data/naturalearth/ne_50m_urban_areas.zip")
-assert urbans_path.exists()
+master_table_path = Path("data/master_tables/raw.gpkg")
+assert master_table_path.exists()
 
 out_path = Path("out")
 
-# %%
+# %% load data
 
 countries = gpd.read_file(countries_path)
-urbans = gpd.read_file(urbans_path)
+master_table = gpd.read_file(master_table_path)
 
-# %%
-
-summary = gpd.read_file(data_path)
-summary["name"] = summary["x"].str.split("/").str[-1].str.split(".").str[0]
-
-# %%
-
-# %%
+# %% all sites
 
 fig, ax = plt.subplots(figsize=(14, 6), dpi=150)
 
 countries.plot(ax=ax, color="lightgrey", edgecolor="lightgrey")
-
-summary[summary["is_fully_labeled"] == False].centroid.plot(
-    ax=ax, color="blue", markersize=16, label="partially labeled sites"
-)
-
-summary[summary["is_fully_labeled"] == True].centroid.plot(
-    ax=ax, color="red", markersize=16, label="fully labeled sites"
-)
+master_table.centroid.plot(ax=ax, color="red", markersize=16)
 
 ax.set_ylim((-60, 85))
 ax.set_axis_off()
-ax.legend(loc="lower left")
-ax.set_title("TreeAI global sites")
+ax.set_title("TreeAI fully labeled sites - world")
 fig.tight_layout()
 
-fig.savefig(out_path / "sites_global.png")
+fig.savefig(out_path / "sites_fully_labeled_world.png")
 fig.show()
 
-# %%
+# %% europe sites
 
-fig, ax = plt.subplots(figsize=(12, 6), dpi=150)
+fig, ax = plt.subplots(figsize=(8, 6), dpi=150)
 
 countries.plot(ax=ax, color="lightgrey", edgecolor="darkgray")
+master_table.centroid.plot(ax=ax, color="red", markersize=16)
 
-summary[summary["is_fully_labeled"] == False].centroid.plot(
-    ax=ax, color="blue", markersize=16, label="partially labeled sites"
-)
-
-summary[summary["is_fully_labeled"] == True].centroid.plot(
-    ax=ax, color="red", markersize=16, label="fully labeled sites"
-)
-
-ax.set_xlim((-15, 50))
+ax.set_xlim((-15, 35))
 ax.set_ylim((35, 65))
 ax.set_axis_off()
-ax.legend(loc="upper left")
-ax.set_title("TreeAI European sites")
+ax.set_title("TreeAI fully labeled sites - Europe")
 fig.tight_layout()
 
-fig.savefig(out_path / "sites_europe.png")
+fig.savefig(out_path / "sites_fully_labeled_europe.png")
 fig.show()
