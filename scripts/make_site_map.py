@@ -9,7 +9,10 @@ import matplotlib.pyplot as plt
 countries_path = Path("data/naturalearth/ne_50m_admin_0_countries.zip")
 assert countries_path.exists()
 
-sites_path = Path("data/summary/sites_shape.gpkg")
+trees_path = Path("data/intermediate/trees_shape.gpkg")
+assert trees_path.exists()
+
+sites_path = Path("data/intermediate/sites_shape.gpkg")
 assert sites_path.exists()
 
 out_path = Path("out")
@@ -17,6 +20,7 @@ out_path = Path("out")
 # %% load data
 
 countries = gpd.read_file(countries_path)
+trees = gpd.read_file(trees_path)
 sites = gpd.read_file(sites_path)
 
 # %% all sites

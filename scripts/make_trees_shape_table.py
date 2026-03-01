@@ -5,6 +5,7 @@ from pathlib import Path
 import geopandas as gpd
 import sklearn
 import numpy as np
+import pandas as pd
 
 warnings.filterwarnings("ignore")
 
@@ -16,37 +17,39 @@ assert shapefile_path.exists()
 rasters_path = Path("data/treeai_shape/rasters_8bit")
 assert rasters_path.exists()
 
-countries_path = Path("data/naturalearth/ne_50m_admin_0_countries.zip")
-assert countries_path.exists()
+species_path = Path("data/intermediate/species.csv")
+assert species_path.exists()
 
-trees_summary_table_path = Path("data/summary/trees_shape.gpkg")
-sites_summary_table_path = Path("data/summary/sites_shape.gpkg")
+trees_summary_table_path = Path("data/intermediate/trees_shape.gpkg")
 
 # %% load data
 
-countries = gpd.read_file(countries_path)[["SOVEREIGNT", "geometry"]].rename(columns={"SOVEREIGNT": "country"})
 trees_a = gpd.read_file(shapefile_path)
-
-trees_a.geometry = trees_a.geometry.make_valid()
+species = pd.read_csv(species_path)
 
 # %% cleanup columns
 
-trees_b = trees_a[["dataset", "speciesLat", "Tiff", "Sp_ID_int", "Biome", "geometry"]]
+trees_b = trees_a[["dataset", "speciesLat", "Tiff", "Biome", "geometry"]]
 
 trees_b = trees_b.rename(
     columns={
         "dataset": "dataset",
-        "speciesLat": "species_name",
+        "speciesLat": "species",
         "Tiff": "raster",
-        "Sp_ID_int": "species_id",
         "Biome": "biome",
         "geometry": "geometry",
     }
 )
 
-# %% add country information
+print(f"found {len(trees_b)} tree shapes")
+print(f"found {trees_b['species'].nunique()} unique species")
 
-trees_c = gpd.sjoin(trees_b, countries, how="left", predicate="within").drop(columns=["index_right"])
+# %% fix geometry
+
+print(f"found {sum(~trees_b.geometry.is_valid)} invalid geometries")
+
+trees_c = trees_b.copy()
+trees_c.geometry = trees_c.geometry.make_valid()
 
 # %% cluster sites
 
@@ -67,15 +70,6 @@ trees_d["site_id"] = centroids_clustered
 
 print(f"found {trees_d['site_id'].nunique()} unique sites")
 
-# %% sites table
-
-sites_a = trees_d[["site_id", "geometry"]].dissolve(by="site_id").reset_index()
-sites_a.geometry = sites_a.geometry.concave_hull(ratio=0.5)
-
-# %% add country information
-
-sites_b = gpd.sjoin(sites_a, countries, how="left", predicate="within").drop(columns=["index_right"])
-
 # %% raster paths
 
 trees_e = trees_d.copy()
@@ -84,18 +78,17 @@ trees_e["raster"] = trees_e["raster"].map(lambda p: (rasters_path / p).as_posix(
 for raster in trees_e["raster"]:
     assert Path(raster).exists()
 
+print("all raster paths are valid")
+
 # %% reorganize columns
 
 trees_f = trees_e[[
-    "site_id", "species_id", "species_name", "raster", "biome", "dataset", "country", "geometry"
+    "site_id", "species", "raster", "biome", "dataset", "geometry"
 ]]
-
-sites_c = sites_b[["site_id", "country", "geometry"]]
 
 # %% save output
 
 trees_summary_table_path.parent.mkdir(parents=True, exist_ok=True)
-sites_summary_table_path.parent.mkdir(parents=True, exist_ok=True)
-
 trees_f.to_file(trees_summary_table_path)
-sites_b.to_file(sites_summary_table_path)
+
+print(f"saved tree shapes table to {trees_summary_table_path}")
