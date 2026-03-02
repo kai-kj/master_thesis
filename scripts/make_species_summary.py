@@ -5,129 +5,116 @@ import graphviz
 from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
+import json
 
 # %% setup
 
-species_table_path = Path("data/intermediate/species.csv")
-assert species_table_path.exists()
+species_path = Path("data/intermediate/species.json")
+assert species_path.exists()
 
 out_path = Path("out")
 
 # %% load data
 
-species_table = pd.read_csv(species_table_path)
+species = json.loads(species_path.read_text())
 
 # %% make graph
 
-ranks = [r.replace("_name", "") for r in species_table.columns if r.endswith("_name")]
 
-nodes: dict[str, set[tuple[str, str]]] = dict()
-edges: set[tuple[str, str]] = set()
+nodes = {}
+edges = []
 
-for r in ranks:
-    nodes[r] = set()
 
-for _, row in species_table.iterrows():
-    prev = row[f"{ranks[0]}_name"]
+def add_children(children, parent=None):
+    for k, v in children.items():
+        if parent: edges.append((parent, k))
+        if v["type"] not in nodes: nodes[v["type"]] = []
 
-    first: None | tuple[str, str] = None
+        color = "red" if v["type"] == "treeai" else "black"
+        nodes[v["type"]].append((
+            k,
+            f"<<FONT COLOR=\"{color}\"><B>{k}</B><BR/>{v['name']}<BR/>count: {v['count']}</FONT>>"
+        ))
 
-    for rank_curr, rank_next in zip(ranks[:-1], ranks[1:]):
-        curr_label = row[f"{rank_curr}_name"]
-        next_label = row[f"{rank_next}_name"]
+        if "children" in v: add_children(v["children"], k)
 
-        curr_label = curr_label if not pd.isnull(curr_label) else ""
-        next_label = next_label if not pd.isnull(next_label) else ""
 
-        curr_name = curr_label.lower().replace(" ", "_") + "_col" * (curr_label != "")
-        next_name = next_label.lower().replace(" ", "_") + "_col" * (next_label != "")
-
-        nodes[rank_curr].add((curr_name, curr_label))
-        nodes[rank_next].add((next_name, next_label))
-        edges.add((curr_name, next_name))
-
-        if not first and curr_name != "":
-            first = (rank_curr, curr_name)
-
-    if first:
-        label = f"{row['name']}"
-        name = label.lower().replace(" ", "_") + "_treeai"
-        label = f"{label}: {row['count']}"
-        nodes[first[0]].add((name, label))
-        edges.add((name, first[1]))
-
-nodes = {k: {vv for vv in v if vv[1] != ""} for k, v in nodes.items()}
-edges = {v for v in edges if v[0] != "" and v[1] != "" and v[0] != v[1]}
+add_children(species)
 
 graph = graphviz.Graph()
 
-for v in edges:
-    graph.edge(v[0], v[1])
+for e in edges:
+    if e[0].startswith("TAI") or e[1].startswith("TAI"):
+        graph.edge(e[0], e[1], style="dotted", penwidth="4")
+    else:
+        graph.edge(e[0], e[1])
 
 for k, v in nodes.items():
-    graph.attr(rank="same")
+    subgraph = graphviz.Graph()
+    subgraph.attr(rank="same")
+
     for vv in v:
-        if vv[0].endswith("_treeai"):
-            graph.node(
-                vv[0], shape="none",
-                label=f"<<FONT COLOR=\"red\"><B>{vv[1]}</B></FONT>>"
-            )
-        else:
-            graph.node(vv[0], shape="none", label=vv[1])
+        subgraph.node(vv[0], shape="none", label=vv[1])
+
+    graph.subgraph(subgraph)
+
+# graph.attr(layout="twopi")
+# graph.attr(root="plantae_col")
+# graph.attr(overlap_scaling="5")
+# graph.attr(ranksep="4")
 
 graph.attr(layout="dot")
-graph.attr(rankdir="RL")
-graph.attr(ranksep="1")
+graph.attr(rankdir="LR")
+graph.attr(ranksep="2")
 graph.attr(nodesep="0")
+graph.attr(splines="polyline")
+
 graph.render(out_path / "species_summary_tree", format="png", cleanup=True)
 
 # %%
 
-species_histogram = species_table[["species_name", "count"]].groupby("species_name").sum().reset_index()
+pd.json_normalize(species, sep="_").to_dict(orient="records")[0]
 
-fig, ax = plt.subplots(figsize=(24, 6))
-
-ax.bar(np.arange(len(species_histogram)), species_histogram["count"])
-
-ax.spines[['right', 'top']].set_visible(False)
-ax.set_xticks(np.arange(len(species_histogram)), labels=species_histogram["species_name"], rotation=90)
-ax.set_ylabel("occurrences")
-ax.set_title("Tree occurrences by species")
-fig.tight_layout()
-
-fig.savefig(out_path / "species_summary_species_hist.png")
-fig.show()
 
 # %%
 
-genus_histogram = species_table[["genus_name", "count"]].groupby("genus_name").sum().reset_index()
+def get_counts(group):
+    records = pd.json_normalize(species, sep="_").to_dict(orient="records")[0]
 
-fig, ax = plt.subplots(figsize=(16, 6))
+    matches = [
+        "_".join(k.split("_")[:-1])  # type: ignore
+        for k, v in records.items()
+        if k.endswith("_type") and v == group  # type: ignore
+    ]
 
-ax.bar(np.arange(len(genus_histogram)), genus_histogram["count"])
+    ids = [m.split("_")[-1] for m in matches]
+    names = [records[f"{k}_name"] for k in matches]
+    counts = [records[f"{k}_count"] for k in matches]
 
-ax.spines[['right', 'top']].set_visible(False)
-ax.set_xticks(np.arange(len(genus_histogram)), labels=genus_histogram["genus_name"], rotation=90)
-ax.set_ylabel("occurrences")
-ax.set_title("Tree occurrences by genus")
-fig.tight_layout()
+    if sum(counts) != species["P"]["count"]:
+        ids.append("(other)")
+        names.append("(other)")
+        counts.append(species["P"]["count"] - sum(counts))
 
-fig.savefig(out_path / "species_summary_genus_hist.png")
-fig.show()
+    return ids, names, counts
+
 
 # %%
 
-family_histogram = species_table[["family_name", "count"]].groupby("family_name").sum().reset_index()
+for group, title in [
+    ("treeai", "TreeAI label"), ("species", "COL species"),
+    ("genus", "COL genus"), ("family", "COL family")
+]:
+    hist = get_counts(group)
 
-fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(int(len(hist[0]) * 0.2), 4))
+    ax.bar(np.arange(len(hist[2])), hist[2])
 
-ax.bar(np.arange(len(family_histogram)), family_histogram["count"])
+    ax.spines[["right", "top"]].set_visible(False)
+    ax.set_xticks(np.arange(len(hist[2])), labels=hist[0], rotation=90)
+    ax.set_ylabel("occurrences")
+    ax.set_title(f"Occurrences by {title}")
+    fig.tight_layout()
 
-ax.spines[['right', 'top']].set_visible(False)
-ax.set_xticks(np.arange(len(family_histogram)), labels=family_histogram["family_name"], rotation=90)
-ax.set_ylabel("occurrences")
-ax.set_title("Tree occurrences by family")
-fig.tight_layout()
-
-fig.savefig(out_path / "species_summary_family_hist.png")
-fig.show()
+    fig.savefig(out_path / f"species_summary_{group}_hist.png")
+    fig.show()

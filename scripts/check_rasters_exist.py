@@ -8,10 +8,10 @@ warnings.filterwarnings("ignore")
 
 # %%
 
-shapefile_path = Path("data/treeai_shape/shapes_v4/202601_FullyL_103402.shp")
+shapefile_path = Path("data/treeai/shapes_v4/202601_FullyL_103402.shp")
 assert shapefile_path.exists()
 
-rasters_path = Path("data/treeai_shape/rasters_8bit")
+rasters_path = Path("data/treeai/rasters_8bit")
 assert rasters_path.exists()
 
 # %%

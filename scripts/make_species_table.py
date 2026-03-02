@@ -12,7 +12,7 @@ warnings.filterwarnings("ignore")
 plantae_dwca_path = Path("data/catalogueoflife/plantae_coldp.tsv")
 assert plantae_dwca_path.exists()
 
-shapefile_path = Path("data/treeai_shape/shapes_v4/202601_FullyL_103402.shp")
+shapefile_path = Path("data/treeai/shapes_v4/202601_FullyL_103402.shp")
 assert shapefile_path.exists()
 
 species_path = Path("data/intermediate/species.csv")
@@ -198,7 +198,22 @@ species_g = species_g.rename(columns={
     "treeai_id": "id", "treeai_name": "name", "treeai_count": "count"
 }).drop(columns=["treeai_name_clean"])
 
+# %% missing data / better id
+
+species_h = species_g.copy()
+
+species_h["kingdom_name"] = species_h["kingdom_name"].fillna("Plantae")
+species_h["kingdom_id"] = species_h["kingdom_id"].fillna("P")
+species_h["phylum_name"] = species_h["phylum_name"].fillna("Tracheophyta")
+species_h["phylum_id"] = species_h["phylum_id"].fillna("TP")
+
+species_h["id"] = species_h["id"].map(lambda i: f"TAI{i:03X}")
+
 # %%
 
 species_path.parent.mkdir(parents=True, exist_ok=True)
-species_g.to_csv(species_path, index=False)
+species_h.to_csv(species_path, index=False)
+
+# %%
+
+species_h = pd.read_csv(species_path)

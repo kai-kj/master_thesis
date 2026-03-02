@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 countries_path = Path("data/naturalearth/ne_50m_admin_0_countries.zip")
 assert countries_path.exists()
 
-trees_path = Path("data/intermediate/trees_shape.gpkg")
+trees_path = Path("data/intermediate/trees.gpkg")
 assert trees_path.exists()
 
 sites_path = Path("data/intermediate/sites_shape.gpkg")
