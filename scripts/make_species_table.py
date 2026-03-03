@@ -133,7 +133,6 @@ assert sum(species_e_full["status"] != "accepted") == 0
 
 # %% get species info
 
-
 print("finding species...")
 species_f_species = species_e.copy()
 species_f_species["id"] = species_f_species["id"].map(lambda i: get_parent("rank", "species", i))
@@ -211,9 +210,13 @@ species_h["id"] = species_h["id"].map(lambda i: f"TAI{i:03X}")
 
 # %%
 
+assert len(species_h["id"].unique()) == len(species_h)
+
 species_path.parent.mkdir(parents=True, exist_ok=True)
 species_h.to_csv(species_path, index=False)
 
 # %%
 
-species_h = pd.read_csv(species_path)
+# species_h = pd.read_csv(species_path)
+# species_h.drop(species_h[species_h["id"] == f"TAI{0:03X}"].index, inplace=True)
+# species_h["id"] = species_h["id"].map(lambda i: int(i.replace("TAI", ""), 16))

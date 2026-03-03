@@ -1,6 +1,5 @@
 # %% imports
 
-import warnings
 from pathlib import Path
 import geopandas as gpd
 import pandas as pd
@@ -22,27 +21,27 @@ trees = gpd.read_file(trees_table_path)
 
 raster_paths = trees["raster"].unique().tolist()
 
-rasters_a = []
+rows: list[gpd.GeoDataFrame] = []
 
 for raster_path in raster_paths:
     with rasterio.open(raster_path) as raster:
         image_size = (raster.width, raster.height)
         pixel_size = (raster.transform[0], -raster.transform[4])
         geometry = shapely.geometry.box(*raster.bounds)
-        crs = str(raster.crs)
+        transform = list(raster.transform)
 
         assert pixel_size[0] == pixel_size[1]
         pixel_size = round(pixel_size[0], 4)
 
         row = gpd.GeoDataFrame(
-            [[raster_path, *image_size, pixel_size, crs, geometry]],
-            columns=["path", "resolution_x", "resolution_y", "pixel_size", "orig_crs", "geometry"],
+            [[raster_path, *image_size, pixel_size, transform, geometry]],
+            columns=["path", "resolution_x", "resolution_y", "pixel_size", "transform", "geometry"],
             crs=raster.crs,
         ).to_crs(trees.crs)  # type: ignore
 
-        rasters_a.append(row)
+        rows.append(row)
 
-rasters_a = gpd.GeoDataFrame(pd.concat(rasters_a))
+rasters_a = gpd.GeoDataFrame(pd.concat(rows))
 
 print(f"found {len(rasters_a)} rasters")
 

@@ -1,10 +1,7 @@
 # %% imports
 
 import pandas as pd
-import graphviz
 from pathlib import Path
-import matplotlib.pyplot as plt
-import numpy as np
 import json
 
 # %% setup

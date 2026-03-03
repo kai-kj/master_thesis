@@ -3,7 +3,6 @@
 import warnings
 from pathlib import Path
 import geopandas as gpd
-import pandas as pd
 
 warnings.filterwarnings("ignore")
 
@@ -15,11 +14,15 @@ assert countries_path.exists()
 trees_path = Path("data/intermediate/trees.gpkg")
 assert trees_path.exists()
 
-sites_table_path = Path("data/intermediate/sites_by_GROUP.gpkg")
+sites_table_path = Path("data/intermediate/sites.gpkg")
 
 # %% load data
 
-countries = gpd.read_file(countries_path)[["SOVEREIGNT", "geometry"]].rename(columns={"SOVEREIGNT": "country"})
+countries = gpd.read_file(countries_path)[["NAME_LONG", "CONTINENT", "REGION_UN", "SUBREGION", "geometry"]]
+countries = countries.rename(
+    columns={"NAME_LONG": "country", "CONTINENT": "continent", "REGION_UN": "region", "SUBREGION": "subregion"}
+)
+
 print(f"found {len(countries)} country shapes")
 
 trees = gpd.read_file(trees_path)
@@ -33,7 +36,7 @@ print(f"found {len(sites_a)} site shapes")
 # %% cleanup site shapes
 
 sites_b = sites_a.copy()
-sites_b.geometry = sites_b.geometry.concave_hull(ratio=0.4)
+sites_b.geometry = sites_b.geometry.concave_hull(ratio=1)
 
 # %% add country information
 
@@ -41,17 +44,21 @@ sites_c = gpd.sjoin(sites_b, countries, how="left", predicate="within").drop(col
 
 # %% tree genus stats
 
-for group in ["id", "species_id", "genus_id", "family_id", "order_id", "class_id", "phylum_id", "kingdom_id"]:
-    species_counts = pd.crosstab(
-        trees["site_id"],
-        trees[group],
-    ).reset_index()
+# for group in ["id", "species_id", "genus_id", "family_id", "order_id", "class_id", "phylum_id", "kingdom_id"]:
+#     species_counts = pd.crosstab(
+#         trees["site_id"],
+#         trees[group],
+#     ).reset_index()
+#
+#     sites_d = sites_c.merge(
+#         species_counts, left_on="site_id", right_on="site_id", how="left"
+#     )
+#
+#     sites_d = sites_d[["site_id", "country", *sites_d.columns[3:], "geometry"]]
 
-    sites_d = sites_c.merge(
-        species_counts, left_on="site_id", right_on="site_id", how="left"
-    )
+# %%
 
-    sites_d = sites_d[["site_id", "country", *sites_d.columns[3:], "geometry"]]
+sites_c = sites_c[["site_id", "country", "continent", "region", "subregion", "geometry"]]
 
-    sites_table_path.parent.mkdir(parents=True, exist_ok=True)
-    sites_d.to_file(sites_table_path.as_posix().replace("GROUP", group))
+sites_table_path.parent.mkdir(parents=True, exist_ok=True)
+sites_c.to_file(sites_table_path)
