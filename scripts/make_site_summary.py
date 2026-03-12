@@ -18,6 +18,8 @@ trees_path = Path("data/intermediate/trees.gpkg")
 assert trees_path.exists()
 
 species_path = Path("data/intermediate/species.csv")
+assert species_path.exists()
+
 out_path = Path("out")
 
 # %% load data
