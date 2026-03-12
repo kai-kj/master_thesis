@@ -15,21 +15,23 @@ import numpy as np
 
 # %% setup
 
+patch_max_black: float = 0.8
+patch_size: int = 512
+patch_overlap: int = 128
+patch_stride = patch_size - 2 * patch_overlap
+
 trees_path = Path("data/intermediate/trees.gpkg")
 assert trees_path.exists()
 
 sites_path = Path("data/intermediate/sites.gpkg")
 assert sites_path.exists()
 
-merged_outputs_path = Path("data/rasters/merged")
-x_output_path = Path("data/rasters/x")
+name = f"patches_{patch_size}x{patch_size}_{patch_overlap}"
 
-rasters_path = Path("data/intermediate/rasters.gpkg")
-
-chip_max_black: float = 0.8
-chip_size: int = 512
-chip_overlap: int = 64
-chip_stride = chip_size - 2 * chip_overlap
+merged_outputs_path = Path("data/intermediate/rasters_merged")
+x_output_path = Path(f"data/intermediate/patches/{patch_size}x{patch_size}_{patch_overlap}/x")
+y_output_path = Path(f"data/intermediate/patches/{patch_size}x{patch_size}_{patch_overlap}/y")
+patches_path = Path(f"data/intermediate/patches_{patch_size}x{patch_size}_{patch_overlap}.gpkg")
 
 # %% load data
 
@@ -47,9 +49,11 @@ def change_crs(shape: shapely.Geometry, src: str, dst: str) -> shapely.Geometry:
 
 merged_outputs_path.mkdir(parents=True, exist_ok=True)
 x_output_path.mkdir(parents=True, exist_ok=True)
+y_output_path.mkdir(parents=True, exist_ok=True)
 
 for f in merged_outputs_path.glob("*"): f.unlink()
 for f in x_output_path.glob("*"): f.unlink()
+for f in y_output_path.glob("*"): f.unlink()
 
 # %%
 
@@ -57,9 +61,9 @@ for f in x_output_path.glob("*"): f.unlink()
 # hard_sites = ["SITE057", "SITE058", "SITE059"]
 # hard_sites = sites[sites["site_id"].isin(hard_sites)]
 
-# %% process rasters
+# %% process patches
 
-rasters = []
+patches = []
 
 for _, site in sites.iterrows():
     name = site['site_id']
@@ -130,11 +134,11 @@ for _, site in sites.iterrows():
             """)
 
         # pad images to get maximum chip cover
-        chip_count_x = int(np.ceil(image.shape[1] / chip_stride))
-        chip_count_y = int(np.ceil(image.shape[0] / chip_stride))
+        patch_count_x = int(np.ceil(image.shape[1] / patch_stride))
+        patch_count_y = int(np.ceil(image.shape[0] / patch_stride))
 
-        padding_x = (chip_count_x * chip_stride) - image.shape[1] + chip_overlap * 2
-        padding_y = (chip_count_y * chip_stride) - image.shape[0] + chip_overlap * 2
+        padding_x = (patch_count_x * patch_stride) - image.shape[1] + patch_overlap * 2
+        padding_y = (patch_count_y * patch_stride) - image.shape[0] + patch_overlap * 2
 
         image = cv2.copyMakeBorder(
             image,
@@ -145,10 +149,10 @@ for _, site in sites.iterrows():
 
         n_rasters = 0
 
-        for i in np.arange(chip_count_x):
-            for j in np.arange(chip_count_y):
-                x0, y0 = (i * chip_stride, j * chip_stride)
-                x1, y1 = (x0 + chip_size, y0 + chip_size)
+        for i in np.arange(patch_count_x):
+            for j in np.arange(patch_count_y):
+                x0, y0 = (i * patch_stride, j * patch_stride)
+                x1, y1 = (x0 + patch_size, y0 + patch_size)
 
                 chip = image[y0:y1, x0:x1].copy()
 
@@ -156,11 +160,11 @@ for _, site in sites.iterrows():
                 cv2.normalize(chip, chip, 255, 0, cv2.NORM_MINMAX)
 
                 # skip images with a lot of black
-                if np.all(chip == [0, 0, 0], axis=-1).sum() / (chip.shape[0] * chip.shape[1]) > chip_max_black:
+                if np.all(chip == [0, 0, 0], axis=-1).sum() / (chip.shape[0] * chip.shape[1]) > patch_max_black:
                     continue
 
-                chip_path = f"{x_output_path.as_posix()}/{name}_{i:03d}_{j:03d}.png"
-                cv2.imwrite(chip_path, chip)
+                patch_path = f"{x_output_path.as_posix()}/{name}_{i:03d}_{j:03d}.png"
+                cv2.imwrite(patch_path, chip)
 
                 bounds = rasterio_transform_xy(
                     raster.transform,
@@ -170,14 +174,14 @@ for _, site in sites.iterrows():
                 bounds = shapely.geometry.box(min(bounds[0]), min(bounds[1]), max(bounds[0]), max(bounds[1]))
                 bounds = change_crs(bounds, raster.crs, sites.crs)  # type: ignore
 
-                rasters.append((chip_path, name, i, j, bounds))
+                patches.append((patch_path, name, i, j, bounds))
 
                 n_rasters += 1
 
         print(f"  created {n_rasters} rasters")
 
-rasters = gpd.GeoDataFrame(rasters, columns=["path", "site_id", "row", "col", "geometry"], crs=sites.crs)
+patches = gpd.GeoDataFrame(patches, columns=["path", "site_id", "row", "col", "geometry"], crs=sites.crs)
 
 # %%
 
-rasters.to_file(rasters_path)
+patches.to_file(patches_path)
