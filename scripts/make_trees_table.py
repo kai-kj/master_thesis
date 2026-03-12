@@ -31,8 +31,10 @@ species = pd.read_csv(species_path)
 
 trees_b = trees_a[["dataset", "speciesLat", "Tiff", "geometry"]]
 
+levels = ["species", "genus", "family", "order", "class", "phylum", "kingdom"]
+
 trees_b = trees_b.merge(
-    species[["name", "id", "species_id", "genus_id", "family_id", "order_id", "class_id", "phylum_id", "kingdom_id"]],
+    species[["name", "id"] + [ll for l in levels for ll in [f"{l}_id", f"{l}_name"]]],
     left_on="speciesLat",
     right_on="name",
     how="left",
@@ -40,9 +42,7 @@ trees_b = trees_b.merge(
 
 trees_b = trees_b.rename(columns={"Tiff": "raster", "geometry": "geometry", })
 
-trees_b = trees_b[[
-    "id", "species_id", "genus_id", "family_id", "order_id", "class_id", "phylum_id", "kingdom_id", "raster", "geometry"
-]]
+trees_b = trees_b[["id"] + [ll for l in levels for ll in [f"{l}_id", f"{l}_name"]] + ["raster", "geometry"]]
 
 print(f"found {len(trees_b)} tree shapes")
 print(f"  {trees_b['id'].nunique()} unique labels")

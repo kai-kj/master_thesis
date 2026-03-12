@@ -58,11 +58,6 @@ for k, v in nodes.items():
 
     graph.subgraph(subgraph)
 
-# graph.attr(layout="twopi")
-# graph.attr(root="plantae_col")
-# graph.attr(overlap_scaling="5")
-# graph.attr(ranksep="4")
-
 graph.attr(layout="dot")
 graph.attr(rankdir="LR")
 graph.attr(ranksep="2")

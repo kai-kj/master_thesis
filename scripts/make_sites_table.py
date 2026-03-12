@@ -42,20 +42,6 @@ sites_b.geometry = sites_b.geometry.concave_hull(ratio=1)
 
 sites_c = gpd.sjoin(sites_b, countries, how="left", predicate="within").drop(columns=["index_right"])
 
-# %% tree genus stats
-
-# for group in ["id", "species_id", "genus_id", "family_id", "order_id", "class_id", "phylum_id", "kingdom_id"]:
-#     species_counts = pd.crosstab(
-#         trees["site_id"],
-#         trees[group],
-#     ).reset_index()
-#
-#     sites_d = sites_c.merge(
-#         species_counts, left_on="site_id", right_on="site_id", how="left"
-#     )
-#
-#     sites_d = sites_d[["site_id", "country", *sites_d.columns[3:], "geometry"]]
-
 # %%
 
 sites_c = sites_c[["site_id", "country", "continent", "region", "subregion", "geometry"]]
