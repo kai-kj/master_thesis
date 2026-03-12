@@ -8,6 +8,9 @@ uv.lock
 .idea/
 
 # data
-data/
+data/*/*
+!data/*/README.txt
+
+# other
 out/
 map.qgz

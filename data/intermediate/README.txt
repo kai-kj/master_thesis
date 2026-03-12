@@ -1,0 +1,1 @@
+A collection of reference tables with relevant information about various forms of the data. Where possible, these tables only contain references to the data, and not the data itself.
