@@ -70,12 +70,14 @@ centroids = np.array(
 ).transpose()
 
 centroids_clustered = sklearn.cluster \
-    .DBSCAN(eps=0.0005, min_samples=5) \
+    .DBSCAN(eps=0.0003, min_samples=5) \
     .fit(centroids) \
     .labels_
 
 trees_d = trees_c.copy()
 trees_d.insert(0, "site_id", centroids_clustered)
+trees_d = trees_d[trees_d["site_id"] != -1]
+
 trees_d["site_id"] = trees_d["site_id"].map(lambda i: f"SITE{i:03X}")
 
 print(f"found {trees_d['site_id'].nunique()} unique sites")

@@ -5,6 +5,7 @@ import geopandas as gpd
 import pandas as pd
 import rasterio
 from rasterio.merge import merge as rasterio_merge
+from rasterio.mask import mask as rasterio_mask
 from rasterio.plot import reshape_as_image
 from rasterio.plot import reshape_as_raster
 from rasterio.transform import xy as rasterio_transform_xy
@@ -16,7 +17,7 @@ import numpy as np
 # %% setup
 
 patch_max_black: float = 0.8
-patch_size: int = 512
+patch_size: int = 1024
 patch_overlap: int = 128
 patch_stride = patch_size - 2 * patch_overlap
 
