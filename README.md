@@ -18,14 +18,14 @@ Check that all rasters mentioned in the raw TreeAI shapefile exist.
 
 Create image patches for a given patch size and patch overlap.
 
-- in: `trees.gpkg`, `sites.gpkg`
+- in: `trees.gpkg`, `sites_a.gpkg`
 - out: `rasters_merged/`, `patches/*x*_*/`, `patches_*x*_*.gpkg`
 
 ### ```make_site_summary.py```
 
 Make a summary of the sites, in terms of species and genus distribution.
 
-- in: `sites.gpkg`, `trees.gpkg`, `species.csv`
+- in: `sites_a.gpkg`, `trees.gpkg`, `species.csv`
 - out: none
 
 ### ```make_sites_table.py```
@@ -33,7 +33,7 @@ Make a summary of the sites, in terms of species and genus distribution.
 Make a table that groups trees into sites.
 
 - in: `trees.gpkg`
-- out: `sites.gpkg`
+- out: `sites_a.gpkg`
 
 ### ```make_species_json.py```
 

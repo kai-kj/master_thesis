@@ -17,11 +17,11 @@ from matplotlib.gridspec import GridSpec
 
 # %%
 
-sites_path = Path("data/intermediate/sites.gpkg")
+sites_path = Path("data/intermediate/sites_a.gpkg")
 assert sites_path.exists()
 
-trees_path = Path("data/intermediate/trees.gpkg")
-assert trees_path.exists()
+trees_a_path = Path("data/intermediate/trees_a.gpkg")
+assert trees_a_path.exists()
 
 labels_path = Path("data/intermediate/labels.csv")
 assert labels_path.exists()
@@ -37,7 +37,7 @@ groups_path = Path("data/intermediate/groups.csv")
 # %%
 
 sites = gpd.read_file(sites_path)
-trees = gpd.read_file(trees_path)
+trees = gpd.read_file(trees_a_path)
 labels = pd.read_csv(labels_path)
 labels_map = pd.read_csv(labels_map_path)
 

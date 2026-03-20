@@ -20,7 +20,7 @@ assert rasters_path.exists()
 species_path = Path("data/intermediate/species.csv")
 assert species_path.exists()
 
-trees_table_path = Path("data/intermediate/trees.gpkg")
+trees_a_path = Path("data/intermediate/trees_a.gpkg")
 
 # %% load data
 
@@ -94,7 +94,7 @@ print("all raster paths are valid")
 
 # %% save output
 
-trees_table_path.parent.mkdir(parents=True, exist_ok=True)
-trees_e.to_file(trees_table_path)
+trees_a_path.parent.mkdir(parents=True, exist_ok=True)
+trees_e.to_file(trees_a_path)
 
-print(f"saved tree shapes table to {trees_table_path}")
+print(f"saved tree shapes table to {trees_a_path}")

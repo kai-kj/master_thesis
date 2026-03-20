@@ -11,11 +11,11 @@ from distinctipy import get_colors, get_hex
 
 # %% setup
 
-sites_path = Path("data/intermediate/sites.gpkg")
+sites_path = Path("data/intermediate/sites_a.gpkg")
 assert sites_path.exists()
 
-trees_path = Path("data/intermediate/trees.gpkg")
-assert trees_path.exists()
+trees_a_path = Path("data/intermediate/trees_a.gpkg")
+assert trees_a_path.exists()
 
 species_path = Path("data/intermediate/species.csv")
 assert species_path.exists()
@@ -27,7 +27,7 @@ out_path = Path("out")
 # %% load data
 
 sites = gpd.read_file(sites_path)
-trees = gpd.read_file(trees_path)
+trees = gpd.read_file(trees_a_path)
 species = pd.read_csv(species_path)
 
 # %%

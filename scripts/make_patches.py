@@ -4,40 +4,33 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 import rasterio
-from rasterio.merge import merge as rasterio_merge
-from rasterio.mask import mask as rasterio_mask
-from rasterio.plot import reshape_as_image
-from rasterio.plot import reshape_as_raster
 from rasterio.transform import xy as rasterio_transform_xy
-from rasterio.enums import Resampling
 import shapely
 import cv2
 import numpy as np
+import tifffile as tiff
 
 # %% setup
 
-patch_max_black: float = 0.8
+patch_max_black: float = 0.75
 patch_size: int = 1024
-patch_overlap: int = 128
-patch_stride = patch_size - 2 * patch_overlap
+patch_overlap: int = 256
+patch_stride = patch_size - patch_overlap
 
-trees_path = Path("data/intermediate/trees.gpkg")
-assert trees_path.exists()
+rasters_path = Path("data/intermediate/rasters.csv")
+assert rasters_path.exists()
 
-sites_path = Path("data/intermediate/sites.gpkg")
-assert sites_path.exists()
+groups_path = Path("data/intermediate/groups.csv")
+assert groups_path.exists()
 
-name = f"patches_{patch_size}x{patch_size}_{patch_overlap}"
-
-merged_outputs_path = Path("data/intermediate/rasters_merged")
-x_output_path = Path(f"data/intermediate/patches/{patch_size}x{patch_size}_{patch_overlap}/x")
-y_output_path = Path(f"data/intermediate/patches/{patch_size}x{patch_size}_{patch_overlap}/y")
-patches_path = Path(f"data/intermediate/patches_{patch_size}x{patch_size}_{patch_overlap}.gpkg")
+output_path_x = Path(f"data/intermediate/patches/x")
+output_path_y = Path(f"data/intermediate/patches/y")
+patches_path = Path(f"data/intermediate/patches.gpkg")
 
 # %% load data
 
-trees = gpd.read_file(trees_path)
-sites = gpd.read_file(sites_path)
+rasters = pd.read_csv(rasters_path)
+groups = pd.read_csv(groups_path)
 
 
 # %% helper function
@@ -48,141 +41,88 @@ def change_crs(shape: shapely.Geometry, src: str, dst: str) -> shapely.Geometry:
 
 # %% clean output dirs
 
-merged_outputs_path.mkdir(parents=True, exist_ok=True)
-x_output_path.mkdir(parents=True, exist_ok=True)
-y_output_path.mkdir(parents=True, exist_ok=True)
+output_path_x.mkdir(parents=True, exist_ok=True)
+output_path_y.mkdir(parents=True, exist_ok=True)
 
-for f in merged_outputs_path.glob("*"): f.unlink()
-for f in x_output_path.glob("*"): f.unlink()
-for f in y_output_path.glob("*"): f.unlink()
+for f in output_path_x.glob("*"): f.unlink()
+for f in output_path_y.glob("*"): f.unlink()
 
 # %%
 
-# hard_sites = ["SITE054", "SITE048", "SITE05A", "SITE06C"]
-# hard_sites = ["SITE057", "SITE058", "SITE059"]
-# hard_sites = sites[sites["site_id"].isin(hard_sites)]
-
-# %% process patches
-
 patches = []
 
-for _, site in sites.iterrows():
-    name = site['site_id']
-    merged_path = merged_outputs_path / f"{name}.tif"
+for _, row in rasters.iterrows():
+    print(f"processing {row['site_id']}")
 
-    print(f"processing {name}")
+    image_x = tiff.imread(row["path_x"])
+    image_y = tiff.imread(row["path_y"])
+    image_y = image_y.reshape(image_y.shape[0], image_y.shape[1], 1)
 
-    all_sources = []
-    raster_crs = []
+    assert image_x.shape[0:2] == image_y.shape[0:2]
+    assert image_x.shape[2] == 3
+    assert image_y.shape[2] == 1
 
-    for s in list(trees[trees["site_id"] == site["site_id"]]["raster"].unique()):
-        with rasterio.open(s) as r:
-            bounds = np.array(r.bounds).round().astype(np.uint32)
-            all_sources.append((s, *bounds))
-            raster_crs.append(str(r.crs))
+    patch_count_x = int(np.ceil(image_x.shape[1] / patch_stride))
+    patch_count_y = int(np.ceil(image_x.shape[0] / patch_stride))
 
-    raster_crs = list(set(raster_crs))
-    assert len(raster_crs) == 1
-    raster_crs = raster_crs[0]
+    padding_x = (patch_count_x * patch_stride) - image_x.shape[1] + patch_overlap * 2
+    padding_y = (patch_count_y * patch_stride) - image_x.shape[0] + patch_overlap * 2
 
-    # remove fully overlapping sources
-    sources = pd.DataFrame(all_sources, columns=["path", "b0", "b1", "b2", "b3"]) \
-        .sort_values(by="path", ascending=False) \
-        .groupby(["b0", "b1", "b2", "b3"]) \
-        .aggregate("first")["path"] \
-        .tolist()
-
-    print(f"  sources:")
-    for s in all_sources:
-        print(f"  + {s[0]}" if s[0] in sources else f"  - {s[0]}")
-
-    site_bounds = change_crs(shapely.box(*site["geometry"].bounds), sites.crs, raster_crs)  # type: ignore
-
-    rasterio_merge(
-        sources, bounds=site_bounds.bounds,  # type: ignore
-        use_highest_res=True, resampling=Resampling.lanczos, method="max", dst_path=merged_path
+    image_x = cv2.copyMakeBorder(
+        image_x,
+        padding_y // 2, padding_y - padding_y // 2,
+        padding_x // 2, padding_x - padding_x // 2,
+        cv2.BORDER_CONSTANT, value=(0, 0, 0)
     )
 
-    with (rasterio.open(merged_path, "r+") as raster):
-        print(f"  size: {raster.width}x{raster.height}")
-        image = reshape_as_image(raster.read())[:, :, [2, 1, 0]]
+    image_y = cv2.copyMakeBorder(
+        image_y,
+        padding_y // 2, padding_y - padding_y // 2,
+        padding_x // 2, padding_x - padding_x // 2,
+        cv2.BORDER_CONSTANT, value=(0, 0, 0)
+    )
 
-        # remove any white/gray borders
-        h0 = cv2.calcHist([image], [0], None, [256], (0, 256)).reshape(-1)
-        h1 = cv2.calcHist([image], [1], None, [256], (0, 256)).reshape(-1)
-        h2 = cv2.calcHist([image], [2], None, [256], (0, 256)).reshape(-1)
+    n_rasters = 0
 
-        bg = np.array([h0.argsort()[-1], h1.argsort()[-1], h2.argsort()[-1]])
-        bg = np.array([h0.argsort()[-2], h1.argsort()[-2], h2.argsort()[-2]]) if np.all(bg == [0, 0, 0]) else bg
+    for i in np.arange(patch_count_x):
+        for j in np.arange(patch_count_y):
+            x0, y0 = (i * patch_stride, j * patch_stride)
+            x1, y1 = (x0 + patch_size, y0 + patch_size)
 
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        mask = np.all(image == bg, axis=-1).astype(np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel).astype(np.bool)
+            patch_x = image_x[y0:y1, x0:x1].copy()
+            patch_y = image_y[y0:y1, x0:x1].copy()
 
-        image[mask] = [0, 0, 0]
+            # some basic normalization
+            cv2.normalize(patch_x, patch_x, 255, 0, cv2.NORM_MINMAX)
 
-        # save at this stage so that qgis gets nicer images to show
-        raster.write(reshape_as_raster(image[:, :, [2, 1, 0]]))
+            # skip images with a lot of black
+            if np.all(patch_x == [0, 0, 0], axis=-1).sum() / (
+                    patch_x.shape[0] * patch_x.shape[1]) > patch_max_black:
+                continue
 
-        # for qgis
-        with open(f"{merged_path}.aux.xml", "w") as aux_file:
-            aux_file.write("""
-                <PAMDataset>
-                  <PAMRasterBand band="1"><NoDataValue>-1.00000000000000E+00</NoDataValue></PAMRasterBand>
-                  <PAMRasterBand band="2"><NoDataValue>-1.00000000000000E+00</NoDataValue></PAMRasterBand>
-                  <PAMRasterBand band="3"><NoDataValue>-1.00000000000000E+00</NoDataValue></PAMRasterBand>
-                </PAMDataset>
-            """)
+            patch_path_x = f"{output_path_x.as_posix()}/{row['site_id']}_{i:03d}_{j:03d}.png"
+            patch_path_y = f"{output_path_y.as_posix()}/{row['site_id']}_{i:03d}_{j:03d}.png"
 
-        # pad images to get maximum chip cover
-        patch_count_x = int(np.ceil(image.shape[1] / patch_stride))
-        patch_count_y = int(np.ceil(image.shape[0] / patch_stride))
+            cv2.imwrite(patch_path_x, patch_x)
+            cv2.imwrite(patch_path_y, patch_y)
 
-        padding_x = (patch_count_x * patch_stride) - image.shape[1] + patch_overlap * 2
-        padding_y = (patch_count_y * patch_stride) - image.shape[0] + patch_overlap * 2
-
-        image = cv2.copyMakeBorder(
-            image,
-            padding_y // 2, padding_y - padding_y // 2,
-            padding_x // 2, padding_x - padding_x // 2,
-            cv2.BORDER_CONSTANT, value=(0, 0, 0)
-        )
-
-        n_rasters = 0
-
-        for i in np.arange(patch_count_x):
-            for j in np.arange(patch_count_y):
-                x0, y0 = (i * patch_stride, j * patch_stride)
-                x1, y1 = (x0 + patch_size, y0 + patch_size)
-
-                chip = image[y0:y1, x0:x1].copy()
-
-                # some basic normalization
-                cv2.normalize(chip, chip, 255, 0, cv2.NORM_MINMAX)
-
-                # skip images with a lot of black
-                if np.all(chip == [0, 0, 0], axis=-1).sum() / (chip.shape[0] * chip.shape[1]) > patch_max_black:
-                    continue
-
-                patch_path = f"{x_output_path.as_posix()}/{name}_{i:03d}_{j:03d}.png"
-                cv2.imwrite(patch_path, chip)
-
+            with rasterio.open(row["path_x"]) as raster_x:
                 bounds = rasterio_transform_xy(
-                    raster.transform,
+                    raster_x.transform,
                     [y0 - padding_y // 2, y1 - padding_y // 2],
                     [x0 - padding_x // 2, x1 - padding_x // 2]
                 )
                 bounds = shapely.geometry.box(min(bounds[0]), min(bounds[1]), max(bounds[0]), max(bounds[1]))
-                bounds = change_crs(bounds, raster.crs, sites.crs)  # type: ignore
+                bounds = change_crs(bounds, raster_x.crs, "EPSG:4326")  # type: ignore
 
-                patches.append((patch_path, name, i, j, bounds))
-
+                patches.append((row["site_id"], patch_path_x, patch_path_y, bounds))
                 n_rasters += 1
 
-        print(f"  created {n_rasters} rasters")
+    print(f"  created {n_rasters} rasters")
 
-patches = gpd.GeoDataFrame(patches, columns=["path", "site_id", "row", "col", "geometry"], crs=sites.crs)
+patches = gpd.GeoDataFrame(patches, columns=["site_id", "path_x", "path_y", "geometry"], crs="EPSG:4326")
 
 # %%
 
+patches_path.parent.mkdir(parents=True, exist_ok=True)
 patches.to_file(patches_path)

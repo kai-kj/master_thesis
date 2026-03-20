@@ -23,5 +23,6 @@ dependencies = [
     "scikit-learn>=1.7.2",
     "scipy-stubs~=1.17.1",
     "shapely>=2.1.2",
+    "tifffile>=2026.3.3",
     "utm>=0.8.1",
 ]

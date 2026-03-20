@@ -11,10 +11,10 @@ warnings.filterwarnings("ignore")
 countries_path = Path("data/naturalearth/ne_50m_admin_0_countries.zip")
 assert countries_path.exists()
 
-trees_path = Path("data/intermediate/trees.gpkg")
-assert trees_path.exists()
+trees_a_path = Path("data/intermediate/trees_a.gpkg")
+assert trees_a_path.exists()
 
-sites_table_path = Path("data/intermediate/sites.gpkg")
+sites_path = Path("data/intermediate/sites_a.gpkg")
 
 # %% load data
 
@@ -25,7 +25,7 @@ countries = countries.rename(
 
 print(f"found {len(countries)} country shapes")
 
-trees = gpd.read_file(trees_path)
+trees = gpd.read_file(trees_a_path)
 print(f"found {len(trees)} trees shapes")
 
 # %% make sites table
@@ -46,5 +46,5 @@ sites_c = gpd.sjoin(sites_b, countries, how="left", predicate="within").drop(col
 
 sites_c = sites_c[["site_id", "country", "continent", "region", "subregion", "geometry"]]
 
-sites_table_path.parent.mkdir(parents=True, exist_ok=True)
-sites_c.to_file(sites_table_path)
+sites_path.parent.mkdir(parents=True, exist_ok=True)
+sites_c.to_file(sites_path)
