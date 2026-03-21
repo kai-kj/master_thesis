@@ -4,23 +4,26 @@ import warnings
 from pathlib import Path
 import geopandas as gpd
 
+from scripts.check_input_outputs import check_input_outputs
+
 warnings.filterwarnings("ignore")
 
 # %%
 
-shapefile_path = Path("data/treeai/shapes_v4/202601_FullyL_103402.shp")
-assert shapefile_path.exists()
+inputs: dict[str, Path] = {
+    "shapefile": Path("data/treeai/shapes_v4/202601_FullyL_103402.shp"),
+    "rasters": Path("data/treeai/rasters_8bit"),
+}
 
-rasters_path = Path("data/treeai/rasters_8bit")
-assert rasters_path.exists()
+check_input_outputs(inputs, None)
 
 # %%
 
-shapefile = gpd.read_file(shapefile_path)
+shapefile = gpd.read_file(inputs["shapefile"])
 
 # %%
 
 for raster in shapefile["Tiff"]:
-    assert (rasters_path / raster).exists()
+    assert (inputs["rasters"] / raster).exists()
 
 print("all rasters exist")

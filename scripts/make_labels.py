@@ -9,26 +9,30 @@ import numpy as np
 from cycler import cycler
 from distinctipy import get_colors, get_hex
 
+from scripts.check_input_outputs import check_input_outputs
+
 # %% setup
 
-sites_path = Path("data/intermediate/sites_a.gpkg")
-assert sites_path.exists()
+inputs: dict[str, Path] = {
+    "sites": Path("data/intermediate/sites_a.gpkg"),
+    "trees_a": Path("data/intermediate/trees_a.gpkg"),
+    "species": Path("data/intermediate/species.csv"),
+}
 
-trees_a_path = Path("data/intermediate/trees_a.gpkg")
-assert trees_a_path.exists()
+outputs: dict[str, Path] = {
+    "labels": Path("data/intermediate/labels.csv"),
+    "labels_map": Path("data/intermediate/labels_map.csv"),
+    "europe_figure": Path("figures/species_genus_by_region_europe.png"),
+    "global_figure": Path("figures/species_genus_by_region_global.png"),
+}
 
-species_path = Path("data/intermediate/species.csv")
-assert species_path.exists()
-
-labels_path = Path("data/intermediate/labels.csv")
-labels_map_path = Path("data/intermediate/labels_map.csv")
-out_path = Path("out")
+check_input_outputs(inputs, outputs)
 
 # %% load data
 
-sites = gpd.read_file(sites_path)
-trees = gpd.read_file(trees_a_path)
-species = pd.read_csv(species_path)
+sites = gpd.read_file(inputs["sites"])
+trees = gpd.read_file(inputs["trees_a"])
+species = pd.read_csv(inputs["species"])
 
 # %%
 
@@ -243,7 +247,7 @@ ax[0].set_title("By species")
 make_hist(ax[1], genus_combined_europe, "genus")
 ax[1].set_title("By genus")
 fig.tight_layout()
-fig.savefig(out_path / "species_genus_by_region_europe.png")
+fig.savefig(outputs["europe_figure"])
 fig.show()
 
 fig, ax = plt.subplots(2, 1, figsize=(12, 8))
@@ -253,7 +257,7 @@ make_hist(ax[1], genus_combined_group, "genus")
 ax[1].hlines([100], -1, len(genus_combined_group), color="k", linestyle="dashed")
 ax[1].set_title("By genus")
 fig.tight_layout()
-fig.savefig(out_path / "species_genus_by_region_global.png")
+fig.savefig(outputs["global_figure"])
 fig.show()
 
 # %%
@@ -284,54 +288,53 @@ labels_list = [
 
 # %%
 
-labels_map = species[["id", "genus_name"]] \
+labels_map = species[["tree_id", "genus_name"]] \
     .copy() \
-    .rename(columns={"id": "tree_id", "genus_name": "label"})
+    .rename(columns={"genus_name": "label_name"})
 
-labels_map.loc[~labels_map["label"].isin(labels_list), "label"] = "Other"
+labels_map.loc[~labels_map["label_name"].isin(labels_list), "label_name"] = "Other"
 
-dead_tree_id = list(species.loc[species["name"] == "Dead tree", "id"])[0]
-labels_map.loc[labels_map["tree_id"] == dead_tree_id, "label"] = "Dead"
+dead_tree_id = list(species.loc[species["tree_name"] == "Dead tree", "tree_id"])[0]
+labels_map.loc[labels_map["tree_id"] == dead_tree_id, "label_name"] = "Dead"
 
-labels_map = pd.concat([labels_map, pd.DataFrame([{"tree_id": None, "label": "Background"}])], ignore_index=True)
+labels_map = pd.concat([labels_map, pd.DataFrame([{"tree_id": None, "label_name": "Background"}])], ignore_index=True)
 
 label_to_id = {v: i + 3 for i, v in enumerate(labels_list)}
 label_to_id["Background"] = 0
 label_to_id["Other"] = 1
 label_to_id["Dead"] = 2
 
-labels_map["label_id"] = labels_map["label"].map(lambda v: label_to_id[v])
-labels_map = labels_map[["tree_id", "label_id", "label"]]
+labels_map["label_id"] = labels_map["label_name"].map(lambda v: label_to_id[v])
+labels_map = labels_map[["tree_id", "label_id", "label_name"]]
 
 # %%
 
-labels = pd.DataFrame(labels_map["label"].unique(), columns=["label"]) \
-    .merge(species[["genus_name", "genus_id"]].drop_duplicates(), left_on="label", right_on="genus_name", how="left") \
+labels = pd.DataFrame(labels_map["label_name"].unique(), columns=["label_name"]) \
+    .merge(
+    species[["genus_name", "genus_id"]].drop_duplicates(), left_on="label_name", right_on="genus_name", how="left"
+) \
     .drop(columns="genus_name") \
-    .rename(columns={"label": "name", "genus_id": "description"})
+    .rename(columns={"genus_id": "description"})
 
 labels["description"] = labels["description"].map(
     lambda v: f"https://catalogueoflife.org/data/taxon/{v}" if not pd.isna(v) else ""
 )
 
-labels.loc[labels["name"] == "Dead", "description"] = "Dead tree of any genus"
-labels.loc[labels["name"] == "Other", "description"] = "Other tree genera"
-labels.loc[labels["name"] == "Background", "description"] = "Background class"
+labels.loc[labels["label_name"] == "Dead", "description"] = "Dead tree of any genus"
+labels.loc[labels["label_name"] == "Other", "description"] = "Other tree genera"
+labels.loc[labels["label_name"] == "Background", "description"] = "Background class"
 
-labels["id"] = labels["name"].map(lambda v: label_to_id[v])
-labels = labels[["id", "name", "description"]].sort_values("id").reset_index(drop=True)
+labels["label_id"] = labels["label_name"].map(lambda v: label_to_id[v])
+labels = labels[["label_id", "label_name", "description"]].sort_values("label_id").reset_index(drop=True)
 
-assert labels["id"].nunique() == labels["name"].nunique()
+assert labels["label_id"].nunique() == labels["label_name"].nunique()
 
 print(f"{len(labels)} labels:")
 
 for _, r in labels.iterrows():
-    print(f"- {r['name']}: {r['description']}")
+    print(f"- {r['label_name']}: {r['description']}")
 
 # %%
 
-labels_path.parent.mkdir(parents=True, exist_ok=True)
-labels.to_csv(labels_path, index=False)
-
-labels_map_path.parent.mkdir(parents=True, exist_ok=True)
-labels_map.to_csv(labels_map_path, index=False)
+labels.to_csv(outputs["labels"], index=False)
+labels_map.to_csv(outputs["labels_map"], index=False)

@@ -12,5 +12,6 @@ data/*/*
 !data/*/README.txt
 
 # other
-out/
+models/
+figures/
 map.qgz

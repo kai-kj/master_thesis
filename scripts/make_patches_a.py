@@ -10,6 +10,8 @@ import cv2
 import numpy as np
 import tifffile as tiff
 
+from scripts.check_input_outputs import check_input_outputs
+
 # %% setup
 
 patch_max_black: float = 0.75
@@ -17,20 +19,23 @@ patch_size: int = 1024
 patch_overlap: int = 256
 patch_stride = patch_size - patch_overlap
 
-rasters_path = Path("data/intermediate/rasters.csv")
-assert rasters_path.exists()
+inputs: dict[str, Path] = {
+    "rasters": Path("data/intermediate/rasters.csv"),
+    "groups": Path("data/intermediate/groups.csv"),
+}
 
-groups_path = Path("data/intermediate/groups.csv")
-assert groups_path.exists()
+outputs: dict[str, Path] = {
+    "output_x": Path(f"data/intermediate/patches/x"),
+    "output_y": Path(f"data/intermediate/patches/y"),
+    "patches": Path(f"data/intermediate/patches_a.gpkg"),
+}
 
-output_path_x = Path(f"data/intermediate/patches/x")
-output_path_y = Path(f"data/intermediate/patches/y")
-patches_path = Path(f"data/intermediate/patches.gpkg")
+check_input_outputs(inputs, outputs)
 
 # %% load data
 
-rasters = pd.read_csv(rasters_path)
-groups = pd.read_csv(groups_path)
+rasters = pd.read_csv(inputs["rasters"])
+groups = pd.read_csv(inputs["groups"])
 
 
 # %% helper function
@@ -41,11 +46,11 @@ def change_crs(shape: shapely.Geometry, src: str, dst: str) -> shapely.Geometry:
 
 # %% clean output dirs
 
-output_path_x.mkdir(parents=True, exist_ok=True)
-output_path_y.mkdir(parents=True, exist_ok=True)
+outputs["output_x"].mkdir(parents=True, exist_ok=True)
+outputs["output_y"].mkdir(parents=True, exist_ok=True)
 
-for f in output_path_x.glob("*"): f.unlink()
-for f in output_path_y.glob("*"): f.unlink()
+for f in outputs["output_x"].glob("*"): f.unlink()
+for f in outputs["output_y"].glob("*"): f.unlink()
 
 # %%
 
@@ -65,8 +70,8 @@ for _, row in rasters.iterrows():
     patch_count_x = int(np.ceil(image_x.shape[1] / patch_stride))
     patch_count_y = int(np.ceil(image_x.shape[0] / patch_stride))
 
-    padding_x = (patch_count_x * patch_stride) - image_x.shape[1] + patch_overlap * 2
-    padding_y = (patch_count_y * patch_stride) - image_x.shape[0] + patch_overlap * 2
+    padding_x = (patch_count_x * patch_stride) - image_x.shape[1] + patch_overlap
+    padding_y = (patch_count_y * patch_stride) - image_x.shape[0] + patch_overlap
 
     image_x = cv2.copyMakeBorder(
         image_x,
@@ -100,8 +105,8 @@ for _, row in rasters.iterrows():
                     patch_x.shape[0] * patch_x.shape[1]) > patch_max_black:
                 continue
 
-            patch_path_x = f"{output_path_x.as_posix()}/{row['site_id']}_{i:03d}_{j:03d}.png"
-            patch_path_y = f"{output_path_y.as_posix()}/{row['site_id']}_{i:03d}_{j:03d}.png"
+            patch_path_x = f"{outputs['output_x'].as_posix()}/{row['site_id']}_{i:03d}_{j:03d}.png"
+            patch_path_y = f"{outputs['output_y'].as_posix()}/{row['site_id']}_{i:03d}_{j:03d}.png"
 
             cv2.imwrite(patch_path_x, patch_x)
             cv2.imwrite(patch_path_y, patch_y)
@@ -124,5 +129,4 @@ patches = gpd.GeoDataFrame(patches, columns=["site_id", "path_x", "path_y", "geo
 
 # %%
 
-patches_path.parent.mkdir(parents=True, exist_ok=True)
-patches.to_file(patches_path)
+patches.to_file(outputs["patches"])

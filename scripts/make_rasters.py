@@ -13,22 +13,27 @@ import shapely
 import cv2
 import numpy as np
 
+from scripts.check_input_outputs import check_input_outputs
+
 # %% setup
 
-trees_path = Path("data/intermediate/trees_b.gpkg")
-assert trees_path.exists()
+inputs: dict[str, Path] = {
+    "trees_path": Path("data/intermediate/trees_b.gpkg"),
+    "sites_path": Path("data/intermediate/sites_b.gpkg"),
+}
 
-sites_path = Path("data/intermediate/sites_b.gpkg")
-assert sites_path.exists()
+outputs: dict[str, Path] = {
+    "x_output": Path("data/intermediate/rasters/x"),
+    "y_output": Path("data/intermediate/rasters/y"),
+    "rasters": Path("data/intermediate/rasters.csv"),
+}
 
-x_output_path = Path("data/intermediate/rasters/x")
-y_output_path = Path("data/intermediate/rasters/y")
-rasters_path = Path("data/intermediate/rasters.csv")
+check_input_outputs(inputs, outputs)
 
 # %% load data
 
-trees = gpd.read_file(trees_path)
-sites = gpd.read_file(sites_path)
+trees = gpd.read_file(inputs["trees_path"])
+sites = gpd.read_file(inputs["sites_path"])
 
 
 # %% helper function
@@ -39,11 +44,11 @@ def change_crs(shape: shapely.Geometry, src: str, dst: str) -> shapely.Geometry:
 
 # %% clean output dirs
 
-x_output_path.mkdir(parents=True, exist_ok=True)
-y_output_path.mkdir(parents=True, exist_ok=True)
+outputs["x_output"].mkdir(parents=True, exist_ok=True)
+outputs["y_output"].mkdir(parents=True, exist_ok=True)
 
-for f in x_output_path.glob("*"): f.unlink()
-for f in y_output_path.glob("*"): f.unlink()
+for f in outputs["x_output"].glob("*"): f.unlink()
+for f in outputs["y_output"].glob("*"): f.unlink()
 
 # %%
 
@@ -51,8 +56,8 @@ rasters = []
 
 for site_id in trees["site_id"].unique().tolist():
     # for site_id in ["SITE042", "SITE055", "SITE056"]:
-    path_x = x_output_path / f"{site_id}.tif"
-    path_y = y_output_path / f"{site_id}.tif"
+    path_x = outputs["x_output"] / f"{site_id}.tif"
+    path_y = outputs["y_output"] / f"{site_id}.tif"
 
     print(f"processing {site_id}")
 
@@ -151,5 +156,4 @@ rasters = pd.DataFrame(rasters, columns=["site_id", "path_x", "path_y"])
 
 # %%
 
-rasters_path.parent.mkdir(parents=True, exist_ok=True)
-rasters.to_csv(rasters_path, index=False)
+rasters.to_csv(outputs["rasters"], index=False)

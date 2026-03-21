@@ -7,25 +7,28 @@ import sklearn
 import numpy as np
 import pandas as pd
 
+from scripts.check_input_outputs import check_input_outputs
+
 warnings.filterwarnings("ignore")
 
 # %% setup
 
-shapefile_path = Path("data/treeai/shapes_v4/202601_FullyL_103402.shp")
-assert shapefile_path.exists()
+inputs: dict[str, Path] = {
+    "shapefile": Path("data/treeai/shapes_v4/202601_FullyL_103402.shp"),
+    "rasters": Path("data/treeai/rasters_8bit"),
+    "species": Path("data/intermediate/species.csv"),
+}
 
-rasters_path = Path("data/treeai/rasters_8bit")
-assert rasters_path.exists()
+outputs: dict[str, Path] = {
+    "trees": Path("data/intermediate/trees_a.gpkg"),
+}
 
-species_path = Path("data/intermediate/species.csv")
-assert species_path.exists()
-
-trees_a_path = Path("data/intermediate/trees_a.gpkg")
+check_input_outputs(inputs, outputs)
 
 # %% load data
 
-trees_a = gpd.read_file(shapefile_path)
-species = pd.read_csv(species_path)
+trees_a = gpd.read_file(inputs["shapefile"])
+species = pd.read_csv(inputs["species"])
 
 # %% cleanup columns
 
@@ -34,7 +37,7 @@ trees_b = trees_a[["dataset", "speciesLat", "Tiff", "geometry"]]
 levels = ["species", "genus", "family", "order", "class", "phylum", "kingdom"]
 
 trees_b = trees_b.merge(
-    species[["name", "id"] + [ll for l in levels for ll in [f"{l}_id", f"{l}_name"]]],
+    species[["name", "tree_id"] + [ll for l in levels for ll in [f"{l}_id", f"{l}_name"]]],
     left_on="speciesLat",
     right_on="name",
     how="left",
@@ -42,10 +45,10 @@ trees_b = trees_b.merge(
 
 trees_b = trees_b.rename(columns={"Tiff": "raster", "geometry": "geometry", })
 
-trees_b = trees_b[["id"] + [ll for l in levels for ll in [f"{l}_id", f"{l}_name"]] + ["raster", "geometry"]]
+trees_b = trees_b[["tree_id"] + [ll for l in levels for ll in [f"{l}_id", f"{l}_name"]] + ["raster", "geometry"]]
 
 print(f"found {len(trees_b)} tree shapes")
-print(f"  {trees_b['id'].nunique()} unique labels")
+print(f"  {trees_b['tree_id'].nunique()} unique labels")
 print(f"  {trees_b['species_id'].nunique()} unique (valid) species")
 print(f"  {trees_b['genus_id'].nunique()} unique (valid) genera")
 print(f"  {trees_b['family_id'].nunique()} unique (valid) families")
@@ -85,7 +88,7 @@ print(f"found {trees_d['site_id'].nunique()} unique sites")
 # %% raster paths
 
 trees_e = trees_d.copy()
-trees_e["raster"] = trees_e["raster"].map(lambda p: (rasters_path / p).as_posix())
+trees_e["raster"] = trees_e["raster"].map(lambda p: (inputs["rasters"] / p).as_posix())
 
 for raster in trees_e["raster"]:
     assert Path(raster).exists()
@@ -94,7 +97,4 @@ print("all raster paths are valid")
 
 # %% save output
 
-trees_a_path.parent.mkdir(parents=True, exist_ok=True)
-trees_e.to_file(trees_a_path)
-
-print(f"saved tree shapes table to {trees_a_path}")
+trees_e.to_file(outputs["trees"])

@@ -1,31 +1,33 @@
 # %% imports
 
-import warnings
 from pathlib import Path
 import geopandas as gpd
 
-warnings.filterwarnings("ignore")
+from scripts.check_input_outputs import check_input_outputs
 
 # %%
 
-countries_path = Path("data/naturalearth/ne_50m_admin_0_countries.zip")
-assert countries_path.exists()
+inputs: dict[str, Path] = {
+    "countries": Path("data/naturalearth/ne_50m_admin_0_countries.zip"),
+    "trees": Path("data/intermediate/trees_a.gpkg"),
+}
 
-trees_a_path = Path("data/intermediate/trees_a.gpkg")
-assert trees_a_path.exists()
+outputs: dict[str, Path] = {
+    "sites": Path("data/intermediate/sites_a.gpkg"),
+}
 
-sites_path = Path("data/intermediate/sites_a.gpkg")
+check_input_outputs(inputs, outputs)
 
 # %% load data
 
-countries = gpd.read_file(countries_path)[["NAME_LONG", "CONTINENT", "REGION_UN", "SUBREGION", "geometry"]]
+countries = gpd.read_file(inputs["countries"])[["NAME_LONG", "CONTINENT", "REGION_UN", "SUBREGION", "geometry"]]
 countries = countries.rename(
     columns={"NAME_LONG": "country", "CONTINENT": "continent", "REGION_UN": "region", "SUBREGION": "subregion"}
 )
 
 print(f"found {len(countries)} country shapes")
 
-trees = gpd.read_file(trees_a_path)
+trees = gpd.read_file(inputs["trees"])
 print(f"found {len(trees)} trees shapes")
 
 # %% make sites table
@@ -45,6 +47,4 @@ sites_c = gpd.sjoin(sites_b, countries, how="left", predicate="within").drop(col
 # %%
 
 sites_c = sites_c[["site_id", "country", "continent", "region", "subregion", "geometry"]]
-
-sites_path.parent.mkdir(parents=True, exist_ok=True)
-sites_c.to_file(sites_path)
+sites_c.to_file(outputs["sites"])

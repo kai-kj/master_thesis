@@ -6,22 +6,27 @@ import pandas as pd
 import geopandas as gpd
 import json
 
+from scripts.check_input_outputs import check_input_outputs
+
 warnings.filterwarnings("ignore")
 
 # %% setup
 
-plantae_dwca_path = Path("data/catalogueoflife/plantae_coldp.tsv")
-assert plantae_dwca_path.exists()
+inputs: dict[str, Path] = {
+    "plantae_dwca": Path("data/catalogueoflife/plantae_coldp.tsv"),
+    "shapefile": Path("data/treeai/shapes_v4/202601_FullyL_103402.shp"),
+}
 
-shapefile_path = Path("data/treeai/shapes_v4/202601_FullyL_103402.shp")
-assert shapefile_path.exists()
+outputs: dict[str, Path] = {
+    "species_table": Path("data/intermediate/species.csv"),
+    "species_json": Path("data/intermediate/species.json"),
+}
 
-species_table_path = Path("data/intermediate/species.csv")
-species_json_path = Path("data/intermediate/species.json")
+check_input_outputs(inputs, outputs)
 
 # %% load data - catalogueoflife
 
-plantae = pd.read_csv(plantae_dwca_path, sep="\t") \
+plantae = pd.read_csv(inputs["plantae_dwca"], sep="\t") \
     .drop(columns=["col:authorship"]) \
     .rename(columns={
     "col:ID": "id",
@@ -33,7 +38,7 @@ plantae = pd.read_csv(plantae_dwca_path, sep="\t") \
 
 # %% load data - trees
 
-trees = gpd.read_file(shapefile_path)[["speciesLat"]]
+trees = gpd.read_file(inputs["shapefile"])[["speciesLat"]]
 trees = trees.rename(columns={"speciesLat": "name"})
 
 # %%
@@ -209,13 +214,13 @@ species_h["phylum_name"] = species_h["phylum_name"].fillna("Tracheophyta")
 species_h["phylum_id"] = species_h["phylum_id"].fillna("TP")
 
 species_h["id"] = species_h["id"].map(lambda i: f"TAI{i:03X}")
+species_h = species_h.rename(columns={"id": "tree_id", "name": "tree_name"})
 
 # %%
 
-assert len(species_h["id"].unique()) == len(species_h)
+assert len(species_h["tree_id"].unique()) == len(species_h)
 
-species_table_path.parent.mkdir(parents=True, exist_ok=True)
-species_h.to_csv(species_table_path, index=False)
+species_h.to_csv(outputs["species_table"], index=False)
 
 # %%
 
@@ -226,7 +231,7 @@ species_h.to_csv(species_table_path, index=False)
 # %%
 
 name_columns = [c for c in species_h.columns if c.endswith("_name")]
-id_columns = [c for c in species_h.columns if c.endswith("_id")]
+id_columns = [c for c in species_h.columns if c.endswith("_id") and c != "tree_id"]
 
 name_columns.reverse()
 id_columns.reverse()
@@ -251,7 +256,7 @@ for _, row in species_h.iterrows():
 
             parent = parent[id_val]["children"]
 
-    parent[row['id']] = {
+    parent[row['tree_id']] = {
         "name": row["name"],
         "type": "treeai",
         "count": row["count"],
@@ -275,5 +280,4 @@ cumulative_count(species_json["P"])
 
 # %%
 
-species_json_path.parent.mkdir(parents=True, exist_ok=True)
-species_json_path.write_text(json.dumps(species_json, indent=4))
+outputs["species_json"].write_text(json.dumps(species_json, indent=4))

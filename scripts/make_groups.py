@@ -3,54 +3,49 @@
 import geopandas as gpd
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.axes import Axes
 from pathlib import Path
 import numpy as np
 from cycler import cycler
 from distinctipy import get_colors, get_hex
-from sklearn.cluster import KMeans
-from scipy.spatial.distance import pdist, squareform
+from scipy.spatial.distance import pdist
 from scipy.cluster.hierarchy import linkage, dendrogram
-from sklearn.manifold import MDS
 from scipy.cluster.hierarchy import fcluster
 from matplotlib.gridspec import GridSpec
 
-# %%
-
-sites_path = Path("data/intermediate/sites_a.gpkg")
-assert sites_path.exists()
-
-trees_a_path = Path("data/intermediate/trees_a.gpkg")
-assert trees_a_path.exists()
-
-labels_path = Path("data/intermediate/labels.csv")
-assert labels_path.exists()
-
-labels_map_path = Path("data/intermediate/labels_map.csv")
-assert labels_map_path.exists()
-
-out_path = Path("out/")
-assert out_path.exists()
-
-groups_path = Path("data/intermediate/groups.csv")
+from scripts.check_input_outputs import check_input_outputs
 
 # %%
 
-sites = gpd.read_file(sites_path)
-trees = gpd.read_file(trees_a_path)
-labels = pd.read_csv(labels_path)
-labels_map = pd.read_csv(labels_map_path)
+inputs: dict[str, Path] = {
+    "sites": Path("data/intermediate/sites_a.gpkg"),
+    "trees_a": Path("data/intermediate/trees_a.gpkg"),
+    "labels": Path("data/intermediate/labels.csv"),
+    "labels_map": Path("data/intermediate/labels_map.csv"),
+}
+
+outputs: dict[str, Path] = {
+    "groups": Path("data/intermediate/groups.csv"),
+    "sites_split_figure": Path("figures/sites_split.png"),
+}
+
+check_input_outputs(inputs, outputs)
+
+# %%
+
+sites = gpd.read_file(inputs["sites"])
+trees = gpd.read_file(inputs["trees_a"])
+labels = pd.read_csv(inputs["labels"])
+labels_map = pd.read_csv(inputs["labels_map"])
 
 # %%
 
 trees_labeled = trees \
-    .merge(labels_map, left_on="id", right_on="tree_id") \
-    [["label_id", "label", "site_id", "geometry"]] \
-    .rename(columns={"label_id": "id", "label": "name"})
+    .merge(labels_map, on="tree_id") \
+    [["label_id", "label_name", "site_id", "geometry"]]
 
 by_site = pd \
-    .crosstab(trees_labeled["site_id"], trees_labeled["id"]) \
-    .rename(columns={r["id"]: r["name"] for _, r in labels[["id", "name"]].iterrows()})
+    .crosstab(trees_labeled["site_id"], trees_labeled["label_id"]) \
+    .rename(columns={r["label_id"]: r["label_name"] for _, r in labels[["label_id", "label_name"]].iterrows()})
 
 by_site["other_frac"] = by_site["Other"] / by_site.sum(axis=1)
 
@@ -163,18 +158,17 @@ ax2.set_xticks(xs, by_group.columns, rotation=90)
 ax2.set_ylabel("occurrences normalized")
 
 fig.tight_layout()
-fig.savefig(out_path / "sites_split.png")
+fig.savefig(outputs["sites_split_figure"])
 fig.show()
 
 # %%
 
 groups_b = groups_a[["site_id", "group_id"]]
 
-groups_b["distribution"] = "none"
-groups_b.loc[groups_a["group_id"].isin(id_groups), "distribution"] = "id"
-groups_b.loc[groups_a["group_id"].isin(ood_groups), "distribution"] = "ood"
+groups_b["dist"] = "none"
+groups_b.loc[groups_a["group_id"].isin(id_groups), "dist"] = "ID"
+groups_b.loc[groups_a["group_id"].isin(ood_groups), "dist"] = "OOD"
 
 # %%
 
-groups_path.parent.mkdir(parents=True, exist_ok=True)
-groups_b.to_csv(groups_path, index=False)
+groups_b.to_csv(outputs["groups"], index=False)

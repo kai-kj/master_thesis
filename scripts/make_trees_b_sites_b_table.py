@@ -4,54 +4,49 @@ import geopandas as gpd
 import pandas as pd
 from pathlib import Path
 
-# %%
-
-trees_a_path = Path("data/intermediate/trees_a.gpkg")
-assert trees_a_path.exists()
-
-sites_a_path = Path("data/intermediate/sites_a.gpkg")
-assert sites_a_path.exists()
-
-groups_path = Path("data/intermediate/groups.csv")
-assert groups_path.exists()
-
-labels_map_path = Path("data/intermediate/labels_map.csv")
-assert labels_map_path.exists()
-
-labels_path = Path("data/intermediate/labels.csv")
-assert labels_path.exists()
-
-trees_b_path = Path("data/intermediate/trees_b.gpkg")
-sites_b_path = Path("data/intermediate/sites_b.gpkg")
+from scripts.check_input_outputs import check_input_outputs
 
 # %%
 
-trees_a = gpd.read_file(trees_a_path)
-sites_a = gpd.read_file(sites_a_path)
-groups = pd.read_csv(groups_path)
-labels_map = pd.read_csv(labels_map_path)
-labels = pd.read_csv(labels_path)
+inputs: dict[str, Path] = {
+    "trees_a": Path("data/intermediate/trees_a.gpkg"),
+    "sites_a": Path("data/intermediate/sites_a.gpkg"),
+    "groups": Path("data/intermediate/groups.csv"),
+    "labels_map": Path("data/intermediate/labels_map.csv"),
+    "labels": Path("data/intermediate/labels.csv"),
+}
+
+outputs: dict[str, Path] = {
+    "trees_b": Path("data/intermediate/trees_b.gpkg"),
+    "sites_b": Path("data/intermediate/sites_b.gpkg"),
+}
+
+check_input_outputs(inputs, outputs)
+
+# %%
+
+trees_a = gpd.read_file(inputs["trees_a"])
+sites_a = gpd.read_file(inputs["sites_a"])
+groups = pd.read_csv(inputs["groups"])
+labels_map = pd.read_csv(inputs["labels_map"])
+labels = pd.read_csv(inputs["labels"])
 
 # %%
 
 trees_b = trees_a \
-    .merge(groups, left_on="site_id", right_on="site_id", how="left") \
-    .merge(labels_map, left_on="id", right_on="tree_id", how="left") \
-    [["id", "site_id", "group_id", "distribution", "label_id", "label", "raster", "geometry"]] \
-    .rename(columns={"id": "tree_id", "label": "label_name"})
+    .merge(groups, on="site_id", how="left") \
+    .merge(labels_map, on="tree_id", how="left") \
+    [["tree_id", "site_id", "group_id", "dist", "label_id", "label_name", "raster", "geometry"]]
 
 trees_b = trees_b[~trees_b["group_id"].isna()]
 
 # %%
 
 sites_b = sites_a \
-    .merge(groups, left_on="site_id", right_on="site_id", how="left") \
-    [["site_id", "group_id", "distribution", "geometry"]]
+    .merge(groups, on="site_id", how="left") \
+    [["site_id", "group_id", "dist", "geometry"]]
 
 # %%
 
-trees_b_path.parent.mkdir(parents=True, exist_ok=True)
-trees_b.to_file(trees_b_path)
-
-sites_b_path.parent.mkdir(parents=True, exist_ok=True)
-sites_b.to_file(sites_b_path)
+trees_b.to_file(outputs["trees_b"])
+sites_b.to_file(outputs["sites_b"])
