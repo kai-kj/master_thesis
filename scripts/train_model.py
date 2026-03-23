@@ -5,6 +5,7 @@ import time
 import torch
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 
 from scripts.check_input_outputs import check_input_outputs
 from scripts.util.train import run_epoch
@@ -39,13 +40,15 @@ dataloader_valid = torch.utils.data.DataLoader(dataset_valid, batch_size=batch_s
 
 # %%
 
-# class_counts = np.array(list(dataset_all.class_counts.values()))
-# weights = np.sum(class_counts) / class_counts
-# weights = weights / weights.sum() * weights.shape[0]
+class_counts = np.array(list(dataset_all.class_counts.values()))
+class_freq = class_counts / np.sum(class_counts)
+
+weights = np.log(1 / class_freq)
+weights = weights / weights.sum() * weights.shape[0]
 
 model = UNet(dataset_all.n_classes).to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-loss_fn = torch.nn.CrossEntropyLoss()  # https://github.com/Nacriema/Loss-Functions-For-Semantic-Segmentation
+optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+loss_fn = torch.nn.CrossEntropyLoss(torch.Tensor(weights).to(device))
 
 # %%
 
@@ -54,9 +57,11 @@ model_path.mkdir(parents=True, exist_ok=False)
 
 (model_path / "class.txt").write_text(str(type(model)))
 
-num_epochs = 5
+num_epochs = 25
 train_loss = []
 valid_loss = []
+
+start_time = time.time()
 
 for epoch in range(num_epochs):
     print(f"epoch {epoch + 1}/{num_epochs}")
@@ -77,6 +82,8 @@ for epoch in range(num_epochs):
 
 torch.cuda.empty_cache()
 
+end_time = time.time()
+
 loss = pd.DataFrame(
     zip(list(i + 1 for i in range(len(train_loss))), train_loss, valid_loss),
     columns=["epoch", "train_loss", "valid_loss"]
@@ -84,7 +91,9 @@ loss = pd.DataFrame(
 
 loss.to_csv(model_path / "loss.csv", index=False)
 
-print("done")
+duration = time.strftime("%H:%M:%S", time.gmtime(end_time - start_time))
+
+print(f"done, training time for {num_epochs} epochs: {duration}")
 
 # %%
 

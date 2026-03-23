@@ -63,11 +63,11 @@ def run_epoch(
     train_loss = []
     valid_loss = []
 
-    for i, (batch_x, batch_y) in tqdm(enumerate(dataloader_train), total=len(dataloader_train), desc="train"):
+    for batch_x, batch_y in tqdm(dataloader_train, total=len(dataloader_train), colour="white", desc="  train"):
         loss = run_batch_train(device, scaler, model, optimizer, loss_fn, batch_x, batch_y)
         train_loss.append(loss)
 
-    for i, (batch_x, batch_y) in tqdm(enumerate(dataloader_valid), total=len(dataloader_valid), desc="valid"):
+    for batch_x, batch_y in tqdm(dataloader_valid, total=len(dataloader_valid), colour="white", desc="  valid"):
         loss = run_batch_valid(device, model, loss_fn, batch_x, batch_y)
         valid_loss.append(loss)
 

@@ -5,6 +5,7 @@ import geopandas as gpd
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import cv2
 
 from scripts.check_input_outputs import check_input_outputs
 
@@ -13,6 +14,7 @@ from scripts.check_input_outputs import check_input_outputs
 inputs: dict[str, Path] = {
     "patches_a": Path("data/intermediate/patches_a.gpkg"),
     "groups": Path("data/intermediate/groups.csv"),
+    "labels": Path("data/intermediate/labels.csv"),
 }
 
 outputs: dict[str, Path] = {
@@ -25,6 +27,7 @@ check_input_outputs(inputs, outputs)
 
 groups = pd.read_csv(inputs["groups"])
 patches_a = gpd.read_file(inputs["patches_a"])
+labels = pd.read_csv(inputs["labels"])
 
 # %%
 
@@ -82,5 +85,24 @@ fig.show()
 
 # %%
 
-patches_c = patches_b[["site_id", "group_id", "dist", "split", "path_x", "path_y", "geometry"]]
+label_counts = []
+
+for path_y in patches_b["path_y"]:
+    image: np.ndarray = cv2.imread(path_y, cv2.IMREAD_GRAYSCALE)[:, :, np.newaxis]  # type: ignore
+    hist = cv2.calcHist([image], [0], None, [len(labels)], [0, len(labels)]).astype(np.int64)
+
+    assert np.sum(hist) == image.shape[0] * image.shape[1]
+    label_counts.append([path_y] + list(hist.flatten()))
+
+label_count_col_names = [f"{l}_count" for l in labels["label_name"]]
+label_counts = pd.DataFrame(label_counts, columns=["path_y"] + label_count_col_names)
+
+# %%
+
+patches_c = patches_b \
+    .merge(label_counts, on="path_y", how="left") \
+    [["site_id", "group_id", "dist", "split", "path_x", "path_y"] + label_count_col_names + ["geometry"]]
+
+# %%
+
 patches_c.to_file(outputs["patches_b"])

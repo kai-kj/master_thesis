@@ -37,6 +37,13 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         self.n_samples = len(self.patches)
         self.n_classes = len(self.label_id_to_name)
 
+        count_columns = [c for c in self.patches.columns if c.endswith("_count")]
+        self.class_counts = {
+            kv[0].replace("_count", ""): kv[1]  # type: ignore
+            for kv
+            in self.patches[count_columns].sum(axis=0).items()
+        }
+
     def __len__(self):
         return self.n_samples
 
@@ -48,6 +55,23 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
         return tv_tensors.Image(x), tv_tensors.Image(y)
 
+
+# %%
+
+if __name__ == "__main__":
+    dataset = DatasetTreeAI(
+        "data/intermediate/patches_b.gpkg",
+        "data/intermediate/labels.csv",
+        "ID", "train",
+    )
+
+    fig, ax = plt.subplots()
+    ax.bar(range(len(dataset.class_counts)), list(dataset.class_counts.values()))
+    ax.set_xticks(range(len(dataset.class_counts)), labels=dataset.class_counts.keys(), rotation=90)
+    ax.set_ylabel("class occurences")
+    ax.spines[["right", "top"]].set_visible(False)
+    fig.tight_layout()
+    fig.show()
 
 # %%
 
