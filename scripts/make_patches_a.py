@@ -15,8 +15,8 @@ from scripts.check_input_outputs import check_input_outputs
 # %% setup
 
 patch_max_black: float = 0.75
-patch_size: int = 1024
-patch_overlap: int = 256
+patch_size: int = 512
+patch_overlap: int = 128
 patch_stride = patch_size - patch_overlap
 
 inputs: dict[str, Path] = {

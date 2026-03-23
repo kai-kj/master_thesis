@@ -22,7 +22,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         assert patches_b_path.exists()
         assert labels_path.exists()
         assert dist in ["ID", "OOD"]
-        assert split in ["train", "valid", "test"]
+        assert split in ["train", "test"]
 
         self.dist = dist
         self.split = split
@@ -35,6 +35,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         self.label_name_to_id = {v: k for k, v in self.label_id_to_name.items()}
 
         self.n_samples = len(self.patches)
+        self.n_classes = len(self.label_id_to_name)
 
     def __len__(self):
         return self.n_samples
@@ -43,13 +44,12 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         row = self.patches.iloc[idx]
 
         x = tv_io.read_image(str(row["path_x"])).to(torch.float32) / 255.0
-        y = tv_io.read_image(str(row["path_y"])).to(torch.float32) / 255.0
+        y = tv_io.read_image(str(row["path_y"])).long()
 
         return tv_tensors.Image(x), tv_tensors.Image(y)
 
 
 # %%
-
 
 if __name__ == "__main__":
     random.seed(42)
