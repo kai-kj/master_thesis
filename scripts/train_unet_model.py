@@ -6,37 +6,64 @@ import torch
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import torchvision.transforms.v2 as tv_transforms
+import sklearn
 
 from scripts.check_input_outputs import check_input_outputs
 from scripts.util.train import run_epoch
 from scripts.models.unet import UNet
 from scripts.dataset import DatasetTreeAI
+from scripts.util.seed import seed
 
 # %%
 
 inputs: dict[str, Path] = {
     "patches": Path("data/intermediate/patches_b.gpkg"),
     "labels": Path("data/intermediate/labels.csv"),
+    "base_model": Path("models/20260330_140518"),
 }
 
 outputs: dict[str, Path] = {
     "models": Path("models"),
 }
 
-check_input_outputs(inputs, outputs)
+check_input_outputs(inputs, outputs)  # type: ignore
 
 device = torch.device("cuda")
 batch_size = 6
 
+seed(42)
+
 # %%
 
-generator = torch.Generator().manual_seed(42)
+train_transform = tv_transforms.Compose([
+    tv_transforms.RandomHorizontalFlip(),
+    tv_transforms.RandomVerticalFlip(),
+    tv_transforms.RandomRotation([0, 360]),
+    tv_transforms.RandomCrop([512, 512]),
+])
+
+valid_transform = tv_transforms.Compose([
+    tv_transforms.CenterCrop([512, 512]),
+])
 
 dataset_all = DatasetTreeAI(inputs["patches"], inputs["labels"], "ID", "train")
-dataset_train, dataset_valid = torch.utils.data.random_split(dataset_all, [0.8, 0.2], generator)
+train_idx, valid_idx = sklearn.model_selection.train_test_split(range(len(dataset_all)), test_size=0.2)
 
-dataloader_train = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, shuffle=True, generator=generator)
-dataloader_valid = torch.utils.data.DataLoader(dataset_valid, batch_size=batch_size, shuffle=True, generator=generator)
+dataset_train = DatasetTreeAI(inputs["patches"], inputs["labels"], "ID", "train", train_idx, train_transform)
+dataset_valid = DatasetTreeAI(inputs["patches"], inputs["labels"], "ID", "train", valid_idx, valid_transform)
+
+dataloader_train = torch.utils.data.DataLoader(
+    dataset_train,
+    batch_size=batch_size, shuffle=True,
+    pin_memory=True, num_workers=6, persistent_workers=True
+)
+
+dataloader_valid = torch.utils.data.DataLoader(
+    dataset_valid,
+    batch_size=batch_size, shuffle=True,
+    pin_memory=True, num_workers=4, persistent_workers=True
+)
 
 # %%
 
@@ -47,8 +74,13 @@ weights = np.log(1 / class_freq)
 weights = weights / weights.sum() * weights.shape[0]
 
 model = UNet(dataset_all.n_classes).to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+
+if "base_model" in inputs:
+    model.load_state_dict(torch.load(inputs["base_model"] / "model.pt"))
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 loss_fn = torch.nn.CrossEntropyLoss(torch.Tensor(weights).to(device))
+scaler = torch.amp.grad_scaler.GradScaler(device=device.type)
 
 # %%
 
@@ -57,7 +89,7 @@ model_path.mkdir(parents=True, exist_ok=False)
 
 (model_path / "class.txt").write_text(str(type(model)))
 
-num_epochs = 25
+num_epochs = 50
 train_loss = []
 valid_loss = []
 
@@ -70,7 +102,8 @@ for epoch in range(num_epochs):
         device,
         model,
         optimizer, loss_fn,
-        dataloader_train, dataloader_valid
+        dataloader_train, dataloader_valid,
+        scaler
     )
 
     torch.save(model.state_dict(), model_path / "model.pt")
@@ -79,8 +112,6 @@ for epoch in range(num_epochs):
     valid_loss.append(curr_valid_loss)
 
     print(f"  train loss: {train_loss[-1]:.4f}\n  valid loss: {valid_loss[-1]:.4f}")
-
-torch.cuda.empty_cache()
 
 end_time = time.time()
 
@@ -101,13 +132,6 @@ fig, ax = plt.subplots()
 
 ax.plot(train_loss, label="train loss")
 ax.plot(valid_loss, label="valid loss")
-ax.hlines(
-    [train_loss[-1], valid_loss[-1]], 0, len(train_loss),
-    label="final loss", linestyles="dashed", color="red"
-)
-
-ax.text(len(train_loss), train_loss[-1], f"{train_loss[-1]:.3f}")
-ax.text(len(valid_loss), valid_loss[-1], f"{valid_loss[-1]:.3f}")
 
 ax.set_xlabel("epoch")
 ax.set_ylabel("loss")

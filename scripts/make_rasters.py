@@ -7,6 +7,7 @@ import rasterio
 from rasterio.merge import merge as rasterio_merge
 from rasterio.plot import reshape_as_image
 from rasterio.plot import reshape_as_raster
+from rasterio.mask import mask as rasterio_mask
 from rasterio.features import rasterize as rasterio_rasterize
 from rasterio.enums import Resampling
 import shapely
@@ -14,6 +15,7 @@ import cv2
 import numpy as np
 
 from scripts.check_input_outputs import check_input_outputs
+from scripts.util.crs import change_crs
 
 # %% setup
 
@@ -35,13 +37,6 @@ check_input_outputs(inputs, outputs)
 trees = gpd.read_file(inputs["trees_path"])
 sites = gpd.read_file(inputs["sites_path"])
 
-
-# %% helper function
-
-def change_crs(shape: shapely.Geometry, src: str, dst: str) -> shapely.Geometry:
-    return gpd.GeoDataFrame({"geometry": [shape]}, crs=src).to_crs(dst).geometry[0]
-
-
 # %% clean output dirs
 
 outputs["x_output"].mkdir(parents=True, exist_ok=True)
@@ -55,11 +50,14 @@ for f in outputs["y_output"].glob("*"): f.unlink()
 rasters = []
 
 for site_id in trees["site_id"].unique().tolist():
-    # for site_id in ["SITE042", "SITE055", "SITE056"]:
+    # for site_id in ["SITE075"]:
+    path_x_unmasked = outputs["x_output"] / f"{site_id}.unmasked.tif"
     path_x = outputs["x_output"] / f"{site_id}.tif"
     path_y = outputs["y_output"] / f"{site_id}.tif"
 
     print(f"processing {site_id}")
+
+    print("  merging")
 
     all_sources = []
     raster_crs = []
@@ -81,24 +79,42 @@ for site_id in trees["site_id"].unique().tolist():
         .aggregate("first")["path"] \
         .tolist()
 
-    print(f"  sources:")
+    print(f"    sources:")
     for s in all_sources:
-        print(f"  + {s[0]}" if s[0] in sources else f"  - {s[0]}")
+        print(f"    + {s[0]}" if s[0] in sources else f"  - {s[0]}")
 
-    site_bounds = change_crs(
-        shapely.box(*sites.loc[sites["site_id"] == site_id, "geometry"].item().bounds),  # type: ignore
+    site_shape = change_crs(
+        sites.loc[sites["site_id"] == site_id, "geometry"].item(),  # type: ignore
         sites.crs, raster_crs,  # type: ignore
     )
 
     rasterio_merge(
-        sources, bounds=site_bounds.bounds,  # type: ignore
-        use_highest_res=True, resampling=Resampling.lanczos, method="max", dst_path=path_x
+        sources, bounds=site_shape.bounds,  # type: ignore
+        use_highest_res=True, resampling=Resampling.lanczos, method="max", dst_path=path_x_unmasked
     )
+
+    print("  masking")
+
+    with rasterio.open(path_x_unmasked, "r") as raster_x_unmasked:
+        data_x, transform_x = rasterio_mask(raster_x_unmasked, shapes=[site_shape], crop=True)
+        meta_x = raster_x_unmasked.meta
+
+        meta_x.update({
+            "height": data_x.shape[1],
+            "width": data_x.shape[2],
+            "transform": transform_x
+        })
+
+        with rasterio.open(path_x, "w", **meta_x) as raster_x:
+            raster_x.write(data_x)
+
+    print("  basic pre-processing")
 
     with rasterio.open(path_x, "r+") as raster_x:
         image_x = reshape_as_image(raster_x.read())[:, :, [2, 1, 0]]
 
-        print(f"  size: {image_x.shape[0]}x{image_x.shape[1]}x{image_x.shape[2]}")
+        print(f"    size: {image_x.shape[0]}x{image_x.shape[1]}x{image_x.shape[2]}")
+        print("    removing borders")
 
         # remove any white/gray borders
         h0 = cv2.calcHist([image_x], [0], None, [256], (0, 256)).reshape(-1)
@@ -114,6 +130,8 @@ for site_id in trees["site_id"].unique().tolist():
 
         image_x[mask] = [0, 0, 0]
         image_x[image_x == [255, 255, 255]] = 0
+
+        print("    normalizing")
 
         image_x = image_x.astype(np.float32) / 255.0
         # p_low, p_high = np.percentile(image_x, (2.5, 97.5))
@@ -137,20 +155,26 @@ for site_id in trees["site_id"].unique().tolist():
         profile_y = raster_x.profile.copy()
         profile_y.update(count=1, dtype="uint8")
 
-        shapes = [
-            (change_crs(r["geometry"], trees.crs, raster_crs), r["label_id"])  # type: ignore
-            for _, r
-            in trees[trees["site_id"] == site_id].iterrows()
-        ]
+    print("  generating labels")
 
-        rasterio_rasterize(shapes=shapes, fill=0, nodata=0, dtype="uint8", dst_path=path_y, dst_kwds=profile_y)
+    shapes = [
+        (change_crs(r["geometry"], trees.crs, raster_crs), r["label_id"])  # type: ignore
+        for _, r
+        in trees[trees["site_id"] == site_id].iterrows()
+    ]
 
-        with rasterio.open(path_y, "r") as raster_y:
-            image_y = reshape_as_image(raster_y.read())
-            assert len(np.unique(image_y)) \
-                   == trees.loc[trees["site_id"] == site_id, "label_id"].nunique() + 1  # type: ignore
+    shapes = [s for s in shapes if site_shape.contains(s[0])]  # type: ignore
 
-        rasters.append((site_id, path_x.as_posix(), path_y.as_posix()))
+    rasterio_rasterize(shapes=shapes, fill=0, nodata=0, dtype="uint8", dst_path=path_y, dst_kwds=profile_y)
+
+    with rasterio.open(path_y, "r") as raster_y:
+        image_y = reshape_as_image(raster_y.read())
+        assert len(np.unique(image_y)) \
+               == trees.loc[trees["site_id"] == site_id, "label_id"].nunique() + 1  # type: ignore
+
+    rasters.append((site_id, path_x.as_posix(), path_y.as_posix()))
+
+    path_x_unmasked.unlink()
 
 rasters = pd.DataFrame(rasters, columns=["site_id", "path_x", "path_y"])
 

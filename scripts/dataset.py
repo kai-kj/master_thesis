@@ -8,12 +8,21 @@ from pathlib import Path
 import geopandas as gpd
 from torchvision import tv_tensors
 import torchvision.io as tv_io
+import torchvision.transforms.v2 as tv_transforms
+
+from scripts.util.seed import seed
 
 
 # %%
 
 class DatasetTreeAI(torch.utils.data.Dataset):
-    def __init__(self, patches_b_path: str | Path, labels_path: str | Path, dist: str, split: str):
+    def __init__(
+            self,
+            patches_b_path: str | Path, labels_path: str | Path,
+            dist: str, split: str,
+            indices: None | list[int] = None,
+            transform: None | tv_transforms.Transform = None
+    ):
         super(DatasetTreeAI, self).__init__()
 
         patches_b_path = Path(patches_b_path)
@@ -31,6 +40,9 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         self.patches = self.patches[self.patches["dist"] == self.dist]
         self.patches = self.patches[self.patches["split"] == self.split]
 
+        if indices is not None:
+            self.patches = self.patches.iloc[indices]
+
         self.label_id_to_name = {r["label_id"]: r["label_name"] for _, r in pd.read_csv(labels_path).iterrows()}
         self.label_name_to_id = {v: k for k, v in self.label_id_to_name.items()}
 
@@ -44,14 +56,27 @@ class DatasetTreeAI(torch.utils.data.Dataset):
             in self.patches[count_columns].sum(axis=0).items()
         }
 
+        self.transform = transform
+
     def __len__(self):
         return self.n_samples
 
     def __getitem__(self, idx) -> tuple[tv_tensors.Image, tv_tensors.Image]:
         row = self.patches.iloc[idx]
 
-        x = tv_io.read_image(str(row["path_x"])).to(torch.float32) / 255.0
-        y = tv_io.read_image(str(row["path_y"])).long()
+        xy = torch.cat(
+            [
+                tv_io.read_image(str(row["path_x"])),
+                tv_io.read_image(str(row["path_y"])),
+            ],
+            0
+        )
+
+        if self.transform is not None:
+            xy = self.transform(xy)
+
+        x = xy[0:3, :, :].to(torch.float32) / 255.0
+        y = xy[3, :, :].long()
 
         return tv_tensors.Image(x), tv_tensors.Image(y)
 
@@ -76,12 +101,20 @@ if __name__ == "__main__":
 # %%
 
 if __name__ == "__main__":
-    random.seed(42)
+    seed(42)
+
+    basic_transform = tv_transforms.Compose([
+        tv_transforms.RandomHorizontalFlip(),
+        tv_transforms.RandomVerticalFlip(),
+        tv_transforms.RandomRotation([0, 360]),
+        tv_transforms.RandomCrop([512, 512]),
+    ])
 
     dataset = DatasetTreeAI(
         "data/intermediate/patches_b.gpkg",
         "data/intermediate/labels.csv",
         "ID", "train",
+        transform=basic_transform
     )
 
     n_samples = 5

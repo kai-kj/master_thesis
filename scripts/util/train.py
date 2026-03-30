@@ -3,6 +3,7 @@
 import numpy as np
 import torch
 from tqdm import tqdm
+import gc
 
 
 # %%
@@ -43,7 +44,7 @@ def run_batch_valid(
 
     x, y_true = x.to(device), y_true.to(device).squeeze(1)
 
-    with torch.no_grad() and torch.amp.autocast_mode.autocast(device_type=device.type):
+    with torch.inference_mode(), torch.amp.autocast_mode.autocast(device_type=device.type):
         y_pred = model(x)
         y_loss = loss_fn(y_pred, y_true)
 
@@ -57,9 +58,8 @@ def run_epoch(
         loss_fn: torch.nn.modules.loss._Loss,
         dataloader_train: torch.utils.data.DataLoader,
         dataloader_valid: torch.utils.data.DataLoader,
+        scaler: torch.amp.grad_scaler.GradScaler,
 ) -> tuple[float, float]:
-    scaler = torch.amp.grad_scaler.GradScaler(device=device.type)
-
     train_loss = []
     valid_loss = []
 
@@ -67,8 +67,12 @@ def run_epoch(
         loss = run_batch_train(device, scaler, model, optimizer, loss_fn, batch_x, batch_y)
         train_loss.append(loss)
 
+    gc.collect()
+
     for batch_x, batch_y in tqdm(dataloader_valid, total=len(dataloader_valid), colour="white", desc="  valid"):
         loss = run_batch_valid(device, model, loss_fn, batch_x, batch_y)
         valid_loss.append(loss)
+
+    gc.collect()
 
     return float(np.mean(train_loss)), float(np.mean(valid_loss))
