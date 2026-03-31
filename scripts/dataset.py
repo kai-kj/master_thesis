@@ -31,14 +31,14 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         assert patches_b_path.exists()
         assert labels_path.exists()
         assert dist in ["ID", "OOD"]
-        assert split in ["train", "test"]
+        assert split in ["train", "test", "both"]
 
         self.dist = dist
         self.split = split
 
         self.patches = gpd.read_file(patches_b_path).reset_index(drop=True)
         self.patches = self.patches[self.patches["dist"] == self.dist]
-        self.patches = self.patches[self.patches["split"] == self.split]
+        self.patches = self.patches[self.patches["split"] == self.split] if split in ["train", "test"] else self.patches
 
         if indices is not None:
             self.patches = self.patches.iloc[indices]

@@ -16,9 +16,9 @@ from scripts.util.crs import change_crs
 # %% setup
 
 patch_max_black: float = 0.75
-patch_max_padding: float = 0.25
+patch_max_padding: float = 0.5
 patch_size: int = 1024
-patch_overlap: int = 512
+patch_overlap: int = 256
 patch_stride = patch_size - patch_overlap
 
 inputs: dict[str, Path] = {
@@ -32,7 +32,7 @@ outputs: dict[str, Path] = {
     "patches": Path(f"data/intermediate/patches_a.gpkg"),
 }
 
-check_input_outputs(inputs, outputs)
+check_input_outputs(inputs, outputs)  # type: ignore
 
 # %% load data
 

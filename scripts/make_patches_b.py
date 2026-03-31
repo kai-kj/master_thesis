@@ -21,7 +21,7 @@ outputs: dict[str, Path] = {
     "patches_b": Path("data/intermediate/patches_b.gpkg"),
 }
 
-check_input_outputs(inputs, outputs)
+check_input_outputs(inputs, outputs)  # type: ignore
 
 # %%
 

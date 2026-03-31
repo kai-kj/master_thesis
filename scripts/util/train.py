@@ -17,12 +17,11 @@ def run_batch_train(
         x: torch.Tensor,
         y_true: torch.Tensor,
 ) -> float:
-    model.train()
-    optimizer.zero_grad()
+    optimizer.zero_grad(set_to_none=True)
 
     x, y_true = x.to(device), y_true.to(device).squeeze(1)
 
-    with torch.amp.autocast_mode.autocast(device_type=device.type):
+    with torch.autocast(device_type=device.type):
         y_pred = model(x)
         y_loss = loss_fn(y_pred, y_true)
 
@@ -40,8 +39,6 @@ def run_batch_valid(
         x: torch.Tensor,
         y_true: torch.Tensor,
 ) -> float:
-    model.eval()
-
     x, y_true = x.to(device), y_true.to(device).squeeze(1)
 
     with torch.inference_mode(), torch.amp.autocast_mode.autocast(device_type=device.type):
@@ -63,16 +60,16 @@ def run_epoch(
     train_loss = []
     valid_loss = []
 
+    model.train()
+
     for batch_x, batch_y in tqdm(dataloader_train, total=len(dataloader_train), colour="white", desc="  train"):
         loss = run_batch_train(device, scaler, model, optimizer, loss_fn, batch_x, batch_y)
         train_loss.append(loss)
 
-    gc.collect()
+    model.eval()
 
     for batch_x, batch_y in tqdm(dataloader_valid, total=len(dataloader_valid), colour="white", desc="  valid"):
         loss = run_batch_valid(device, model, loss_fn, batch_x, batch_y)
         valid_loss.append(loss)
-
-    gc.collect()
 
     return float(np.mean(train_loss)), float(np.mean(valid_loss))

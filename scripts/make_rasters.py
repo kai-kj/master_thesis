@@ -30,7 +30,7 @@ outputs: dict[str, Path] = {
     "rasters": Path("data/intermediate/rasters.csv"),
 }
 
-check_input_outputs(inputs, outputs)
+check_input_outputs(inputs, outputs)  # type: ignore
 
 # %% load data
 

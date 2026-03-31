@@ -23,7 +23,7 @@ outputs: dict[str, Path] = {
     "trees": Path("data/intermediate/trees_a.gpkg"),
 }
 
-check_input_outputs(inputs, outputs)
+check_input_outputs(inputs, outputs)  # type: ignore
 
 # %% load data
 

@@ -20,7 +20,7 @@ from scripts.util.seed import seed
 inputs: dict[str, Path] = {
     "patches": Path("data/intermediate/patches_b.gpkg"),
     "labels": Path("data/intermediate/labels.csv"),
-    "base_model": Path("models/20260330_140518"),
+    # "base_model": Path("models/20260330_140518"),
 }
 
 outputs: dict[str, Path] = {
@@ -47,22 +47,22 @@ valid_transform = tv_transforms.Compose([
     tv_transforms.CenterCrop([512, 512]),
 ])
 
-dataset_all = DatasetTreeAI(inputs["patches"], inputs["labels"], "ID", "train")
-train_idx, valid_idx = sklearn.model_selection.train_test_split(range(len(dataset_all)), test_size=0.2)
+dataset_all = DatasetTreeAI(inputs["patches"], inputs["labels"], "ID", "both")
+train_idx, valid_idx = sklearn.model_selection.train_test_split(range(len(dataset_all)), test_size=0.25)
 
-dataset_train = DatasetTreeAI(inputs["patches"], inputs["labels"], "ID", "train", train_idx, train_transform)
-dataset_valid = DatasetTreeAI(inputs["patches"], inputs["labels"], "ID", "train", valid_idx, valid_transform)
+dataset_train = DatasetTreeAI(inputs["patches"], inputs["labels"], "ID", "both", train_idx, train_transform)
+dataset_valid = DatasetTreeAI(inputs["patches"], inputs["labels"], "ID", "both", valid_idx, valid_transform)
 
 dataloader_train = torch.utils.data.DataLoader(
     dataset_train,
     batch_size=batch_size, shuffle=True,
-    pin_memory=True, num_workers=6, persistent_workers=True
+    pin_memory=True, num_workers=6, prefetch_factor=2, persistent_workers=True
 )
 
 dataloader_valid = torch.utils.data.DataLoader(
     dataset_valid,
     batch_size=batch_size, shuffle=True,
-    pin_memory=True, num_workers=4, persistent_workers=True
+    pin_memory=True, num_workers=4, prefetch_factor=2, persistent_workers=True
 )
 
 # %%
@@ -78,7 +78,11 @@ model = UNet(dataset_all.n_classes).to(device)
 if "base_model" in inputs:
     model.load_state_dict(torch.load(inputs["base_model"] / "model.pt"))
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+num_epochs = 100
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=5e-4, weight_decay=1e-3)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=2 * num_epochs)
+
 loss_fn = torch.nn.CrossEntropyLoss(torch.Tensor(weights).to(device))
 scaler = torch.amp.grad_scaler.GradScaler(device=device.type)
 
@@ -89,7 +93,6 @@ model_path.mkdir(parents=True, exist_ok=False)
 
 (model_path / "class.txt").write_text(str(type(model)))
 
-num_epochs = 50
 train_loss = []
 valid_loss = []
 
@@ -106,12 +109,32 @@ for epoch in range(num_epochs):
         scaler
     )
 
-    torch.save(model.state_dict(), model_path / "model.pt")
+    scheduler.step()
 
     train_loss.append(curr_train_loss)
     valid_loss.append(curr_valid_loss)
 
     print(f"  train loss: {train_loss[-1]:.4f}\n  valid loss: {valid_loss[-1]:.4f}")
+
+    if len(valid_loss) == 1 or valid_loss[-1] < np.min(valid_loss[:-1]):
+        print("  best model, saving")
+        torch.save(model.state_dict(), model_path / "model.pt")
+
+    if (epoch + 1) % 10 == 0:
+        fig, ax = plt.subplots()
+
+        ax.plot(train_loss, label="train loss")
+        ax.plot(valid_loss, label="valid loss")
+
+        ax.set_xlim(0, num_epochs)
+        ax.set_xlabel("epoch")
+        ax.set_ylabel("loss")
+        ax.legend()
+        ax.spines[["top", "right"]].set_visible(False)
+
+        fig.tight_layout()
+        fig.savefig(model_path / "loss.png")
+        fig.show()
 
 end_time = time.time()
 
@@ -125,19 +148,3 @@ loss.to_csv(model_path / "loss.csv", index=False)
 duration = time.strftime("%H:%M:%S", time.gmtime(end_time - start_time))
 
 print(f"done, training time for {num_epochs} epochs: {duration}")
-
-# %%
-
-fig, ax = plt.subplots()
-
-ax.plot(train_loss, label="train loss")
-ax.plot(valid_loss, label="valid loss")
-
-ax.set_xlabel("epoch")
-ax.set_ylabel("loss")
-ax.legend()
-ax.spines[["top", "right"]].set_visible(False)
-
-fig.tight_layout()
-fig.savefig(model_path / "loss.png")
-fig.show()
