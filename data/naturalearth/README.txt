@@ -1,1 +1,0 @@
-Various files from https://www.naturalearthdata.com/, for use with geopandas etc.

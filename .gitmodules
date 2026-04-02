@@ -1,0 +1,6 @@
+[submodule "dependencies/treeai_labels"]
+	path = dependencies/treeai_labels
+	url = git@gitlab.ethz.ch:kkitagawa/treeai_labels.git
+[submodule "dependencies/treeai_segmentation"]
+	path = dependencies/treeai_segmentation
+	url = git@gitlab.ethz.ch:kkitagawa/treeai_segmentation.git

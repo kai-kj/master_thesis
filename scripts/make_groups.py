@@ -12,44 +12,43 @@ from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.cluster.hierarchy import fcluster
 from matplotlib.gridspec import GridSpec
 
-from scripts.check_input_outputs import check_input_outputs
+from dependencies.treeai_segmentation.treeai_segmentation import TreeAISegmentation
 
 # %%
 
-inputs: dict[str, Path] = {
-    "sites": Path("data/intermediate/sites_a.gpkg"),
-    "trees_a": Path("data/intermediate/trees_a.gpkg"),
-    "labels": Path("data/intermediate/labels.csv"),
-    "labels_map": Path("data/intermediate/labels_map.csv"),
-}
+labels_map_path = Path("data/labels_map.csv")
+assert labels_map_path.is_file()
 
-outputs: dict[str, Path] = {
-    "groups": Path("data/intermediate/groups.csv"),
-    "sites_split_figure": Path("figures/sites_split.png"),
-}
+countries_path = Path("/home/kai/Thesis/data/naturalearth/ne_10m_admin_0_countries.zip")
+assert countries_path.is_file()
 
-check_input_outputs(inputs, outputs)
+groups_path = Path("data/groups.csv")
+
+treeai = TreeAISegmentation("/home/kai/Thesis/data/treeai-segmentation/", pre_cache=True)
 
 # %%
 
-sites = gpd.read_file(inputs["sites"])
-trees = gpd.read_file(inputs["trees_a"])
-labels = pd.read_csv(inputs["labels"])
-labels_map = pd.read_csv(inputs["labels_map"])
+labels_map = pd.read_csv(labels_map_path)
+countries = gpd.read_file(countries_path)
+
+trees_relabeled = treeai.get_trees_ext() \
+    .merge(labels_map, left_on="label_id", right_on="data_label_id", how="left") \
+    .drop(columns=["label_id", "label_name", "data_label_id", "data_label_name"]) \
+    .rename(columns={"model_label_id": "label_id", "model_label_name": "label_name"}) \
+    [["label_id", "label_name", "raster_name", "site_id", "geometry"]]
+
+sites_ext = treeai.get_sites() \
+    .sjoin(countries[["NAME", "geometry"]], how="left", predicate="intersects") \
+    .drop(columns=["index_right"]) \
+    .rename(columns={"NAME": "country"}) \
+    [["site_id", "country", "geometry"]]
 
 # %%
 
-trees_labeled = trees \
-    .merge(labels_map, on="tree_id") \
-    [["label_id", "label_name", "site_id", "geometry"]]
+other_frac_cutoff = 0.4
 
-by_site = pd \
-    .crosstab(trees_labeled["site_id"], trees_labeled["label_id"]) \
-    .rename(columns={r["label_id"]: r["label_name"] for _, r in labels[["label_id", "label_name"]].iterrows()})
-
-by_site["other_frac"] = by_site["Other"] / by_site.sum(axis=1)
-
-other_frac_cutoff = 0.3
+by_site = pd.crosstab(trees_relabeled["site_id"], trees_relabeled["label_name"])
+by_site["other_frac"] = by_site["other"] / by_site.sum(axis=1)
 
 fig, ax = plt.subplots()
 
@@ -58,65 +57,69 @@ ax.vlines(other_frac_cutoff, ax.get_ylim()[0], ax.get_ylim()[1], linestyle="dash
 ax.text(other_frac_cutoff, ax.get_ylim()[1], f"cutoff: {other_frac_cutoff}", ha="left", va="top", color="red")
 
 ax.spines[["right", "top"]].set_visible(False)
-ax.set_xlabel("fraction \"Other\" of trees")
+ax.set_xlabel("fraction of \"other\" labels")
 ax.set_ylabel("occurrences")
 
 fig.tight_layout()
 fig.show()
 
-print(f"removing {sum(by_site["other_frac"] >= other_frac_cutoff)} / {len(by_site)} sites")
-
+print(f"removing {sum(by_site["other_frac"] >= other_frac_cutoff)}/{len(by_site)} sites")
 by_site = by_site[by_site["other_frac"] < other_frac_cutoff].drop(columns=["other_frac"])
 
 # %%
 
-site_grouping_cutoff = 0.7
+site_grouping_cutoff = 0.65
+
 ood_groups = [
-    "GROUP02",  # Germany
-    "GROUP03",  # Iran
-    "GROUP05",  # Italy
-    "GROUP07",  # Turkey
-    "GROUP08",  # Spain
-    "GROUP09",  # Switzerland
-    "GROUP12",  # Finland
-    "GROUP13",  # Japan
-    "GROUP14",  # Russia
-    "GROUP17",  # China
-    "GROUP18",  # Portugal
-    "GROUP19",  # Russia
-    "GROUP20",  # Russia
-    "GROUP21",  # Slovakia
-    "GROUP22",  # Mexico
+    2,  # Germany
+    4,  # Italy
+    7,  # Turkey
+    8,  # Spain
+    9,  # Switzerland
+    10,  # Finland
+    11,  # Japan
+    12, 16,  # Russia
+    14,  # China
+    15,  # Portugal
+    17,  # Slovakia
+    18,  # Mexico
+    19  # Czechia
 ]
 
 dist_matrix = pdist(np.sqrt((by_site / by_site.sum(axis=0)).values), metric="braycurtis")
 Z = linkage(dist_matrix, method="average")
 
-groups_a = by_site.reset_index()[["site_id"]]
-groups_a["cluster_id"] = fcluster(Z, t=site_grouping_cutoff, criterion="distance")
-groups_a["cluster_id"] = [f"CLUSTER{i:02d}" for i in groups_a["cluster_id"]]
-groups_a = groups_a.merge(sites[["site_id", "country"]], on="site_id", how="left")
-groups_a["group_id"] = groups_a["cluster_id"] + ", " + groups_a["country"]
+groups = by_site.reset_index()[["site_id"]]
+groups["cluster_id"] = fcluster(Z, t=site_grouping_cutoff, criterion="distance")
+groups = groups.merge(sites_ext[["site_id", "country"]], on="site_id", how="left")
+groups["group_id"] = groups["cluster_id"].apply(lambda i: f"{i}") + ", " + groups["country"]
 
-cluster_ids = {v: f"GROUP{i:02d}" for i, v in enumerate(groups_a["group_id"].unique())}
-groups_a["group_id"] = groups_a["group_id"].map(cluster_ids)
+cluster_ids = {v: i for i, v in enumerate(groups["group_id"].unique())}
+groups["group_id"] = groups["group_id"].map(cluster_ids)
+groups = groups[["site_id", "group_id", "country"]]
 
 by_group = by_site \
-    .merge(groups_a[["site_id", "group_id"]], on="site_id", how="left") \
+    .merge(groups[["site_id", "group_id"]], on="site_id", how="left") \
     .drop(columns=["site_id"]) \
     .groupby("group_id") \
     .agg("sum")
 
-id_groups = list(set(groups_a["group_id"]) - set(ood_groups))
+id_groups = list(set(groups["group_id"]) - set(ood_groups))
 
 by_group = by_group.loc[id_groups + ood_groups, :]
 by_group_norm = by_group / by_group.sum(axis=0)
 
 xs = np.arange(0, len(by_group.columns))
 
-dendrogram_labels = (groups_a["group_id"] + " " + groups_a["site_id"] + " " + groups_a["country"]).tolist()
-dendrogram_labels = [f"X {l}" if l.split(" ")[0] in ood_groups else f"   {l}" for l in dendrogram_labels]
-dendrogram_labels = [l.replace("Russian Federation", "Russia") for l in dendrogram_labels]
+dendrogram_labels = groups.apply(
+    lambda r: f"group {r['group_id']:02d}, site {r['site_id']:02d}, {r['country']}",
+    axis=1
+)
+
+dendrogram_labels = [
+    f"X {l}" if int(l.split(" ")[1].removeprefix("0").removesuffix(",")) in ood_groups else f"   {l}"
+    for l in dendrogram_labels
+]
 
 fig = plt.figure(figsize=(16, 16))
 gs = GridSpec(2, 2, figure=fig)
@@ -134,18 +137,16 @@ ax2.set_prop_cycle(cycler(color=[get_hex(c) for c in get_colors(len(by_group), p
 
 bottom = np.zeros_like(by_group.columns)
 
-for _, country in by_group.iterrows():
-    name = country.name
-    data = np.array(country.tolist())
-    ax1.bar(xs, data, bottom=bottom, label=name, hatch="xx" if name in ood_groups else "")
+for _, g in by_group.iterrows():
+    data = np.array(g.tolist())
+    ax1.bar(xs, data, bottom=bottom, label=f"{g.name:02d}", hatch="xx" if g.name in ood_groups else "")
     bottom += data
 
 bottom = np.zeros_like(by_group_norm.columns)
 
-for _, country in by_group_norm.iterrows():
-    name = country.name
-    data = np.array(country.tolist())
-    ax2.bar(xs, data, bottom=bottom, label=name, hatch="xx" if name in ood_groups else "")
+for _, g in by_group_norm.iterrows():
+    data = np.array(g.tolist())
+    ax2.bar(xs, data, bottom=bottom, label=f"{g.name:02d}", hatch="xx" if g.name in ood_groups else "")
     bottom += data
 
 ax1.spines[["right", "top"]].set_visible(False)
@@ -158,17 +159,30 @@ ax2.set_xticks(xs, by_group.columns, rotation=90)
 ax2.set_ylabel("occurrences normalized")
 
 fig.tight_layout()
-fig.savefig(outputs["sites_split_figure"])
+fig.savefig("figures/sites_split.png")
 fig.show()
 
 # %%
 
-groups_b = groups_a[["site_id", "group_id"]]
+groups_split = groups.copy()
 
-groups_b["dist"] = "none"
-groups_b.loc[groups_a["group_id"].isin(id_groups), "dist"] = "ID"
-groups_b.loc[groups_a["group_id"].isin(ood_groups), "dist"] = "OOD"
+groups_split["dist"] = "none"
+groups_split.loc[groups["group_id"].isin(id_groups), "dist"] = "ID"
+groups_split.loc[groups["group_id"].isin(ood_groups), "dist"] = "OOD"
+
+print("ID countries:")
+
+for c in groups_split[groups_split["dist"] == "ID"]["country"].unique():
+    print(f"- {c}")
+
+print("OOD countries:")
+
+for c in groups_split[groups_split["dist"] == "OOD"]["country"].unique():
+    print(f"- {c}")
+
+groups_split = groups_split.drop(columns=["country"])
 
 # %%
 
-groups_b.to_csv(outputs["groups"], index=False)
+groups_path.parent.mkdir(parents=True, exist_ok=True)
+groups_split.to_csv(groups_path, index=False)

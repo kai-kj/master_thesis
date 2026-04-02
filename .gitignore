@@ -1,17 +1,16 @@
 # python
-.venv/
-.python-version
-uv.lock
+/.venv/
+/.python-version
+/uv.lock
 
 # editors
-.vscode/
-.idea/
+/.vscode/
+/.idea/
 
 # data
-data/*/*
-!data/*/README.txt
+/data/
 
 # other
-models/
-figures/
-map.qgz
+/models/
+/figures/
+/map.qgz
