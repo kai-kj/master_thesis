@@ -95,12 +95,7 @@ class UNet(torch.nn.Module):
 if __name__ == "__main__":
     from scripts.dataset import DatasetTreeAI
 
-    dataset = DatasetTreeAI(
-        "data/intermediate/patches_b.gpkg",
-        "data/intermediate/labels.csv",
-        "ID", "train",
-    )
-
+    dataset = DatasetTreeAI("ID", "train", 0)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
 
     model = UNet(len(dataset.label_id_to_name))
@@ -109,7 +104,7 @@ if __name__ == "__main__":
     torch.onnx.export(
         model,
         (next(iter(dataloader))[0],),
-        "models/unet_untrained.onnx",
+        "models/untrained_onnx/unet.onnx",
         input_names=["input"],
         output_names=["output"],
         external_data=False,

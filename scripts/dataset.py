@@ -5,116 +5,146 @@ import random
 import pandas as pd
 import torch
 from pathlib import Path
-import geopandas as gpd
 from torchvision import tv_tensors
 import torchvision.io as tv_io
 import torchvision.transforms.v2 as tv_transforms
+import numpy as np
+import json
 
-from scripts.util.seed import seed
+from dependencies.treeai_segmentation.treeai_segmentation import TreeAISegmentation
 
 
 # %%
 
 class DatasetTreeAI(torch.utils.data.Dataset):
+    TREEAI_SEGMENTATION_PATH = Path("/home/kai/Thesis/data/treeai-segmentation/")
+    GROUPS_PATH = Path("data/groups.csv")
+    LABELS_MAP_PATH = Path("data/labels_map.csv")
+
     def __init__(
             self,
-            patches_b_path: str | Path, labels_path: str | Path,
-            dist: str, split: str,
+            id_or_ood: str, train_or_test: str, split_n: int,
             indices: None | list[int] = None,
-            transform: None | tv_transforms.Transform = None
+            xy_transform: None | tv_transforms.Transform = None,
+            x_transform: None | tv_transforms.Transform = None,
+            y_transform: None | tv_transforms.Transform = None,
     ):
         super(DatasetTreeAI, self).__init__()
 
-        patches_b_path = Path(patches_b_path)
-        labels_path = Path(labels_path)
+        assert self.TREEAI_SEGMENTATION_PATH.exists()
+        assert self.GROUPS_PATH.exists()
+        assert self.LABELS_MAP_PATH.exists()
+        assert id_or_ood in ["ID", "OOD"]
+        assert train_or_test in ["train", "test"]
+        assert split_n in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-        assert patches_b_path.exists()
-        assert labels_path.exists()
-        assert dist in ["ID", "OOD"]
-        assert split in ["train", "test"]
+        self._treeai = TreeAISegmentation(self.TREEAI_SEGMENTATION_PATH)
 
-        self.dist = dist
-        self.split = split
+        self._patches = self._treeai.get_patches_512x512_ext() \
+            .merge(pd.read_csv(self.GROUPS_PATH)[["site_id", "dist"]], on="site_id") \
+            .drop(columns=["geometry"])
 
-        self.patches = gpd.read_file(patches_b_path).reset_index(drop=True)
-        self.patches = self.patches[self.patches["dist"] == self.dist]
-        self.patches = self.patches[self.patches["split"] == self.split]
+        self._patches = self._patches[self._patches["dist"] == id_or_ood]
+        self._patches = self._patches[self._patches[f"split_{split_n}"] == train_or_test]
+
+        self._patches = self._patches[["crop_x0", "crop_x1", "crop_y0", "crop_y1", "path_x", "path_y"]]
 
         if indices is not None:
-            self.patches = self.patches.iloc[indices]
+            self._patches = self._patches.iloc[indices]
 
-        self.label_id_to_name = {r["label_id"]: r["label_name"] for _, r in pd.read_csv(labels_path).iterrows()}
-        self.label_name_to_id = {v: k for k, v in self.label_id_to_name.items()}
+        self._xy_transform = xy_transform
+        self._x_transform = x_transform
+        self._y_transform = y_transform
 
-        self.n_samples = len(self.patches)
-        self.n_classes = len(self.label_id_to_name)
+        labels_map = pd.read_csv(self.LABELS_MAP_PATH)
 
-        count_columns = [c for c in self.patches.columns if c.endswith("_count")]
-        self.class_counts = {
-            kv[0].replace("_count", ""): kv[1]  # type: ignore
-            for kv
-            in self.patches[count_columns].sum(axis=0).items()
-        }
+        self._labels_lut = torch.arange(labels_map["data_label_id"].max() + 1)  # type: ignore
 
-        self.transform = transform
+        for _, r in labels_map.iterrows():
+            self._labels_lut[r["data_label_id"]] = r["model_label_id"]
+
+        self.label_id_to_name = {int(r["model_label_id"]): str(r["model_label_name"]) for _, r in labels_map.iterrows()}
+        self.label_name_to_id = {str(r["model_label_name"]): int(r["model_label_id"]) for _, r in labels_map.iterrows()}
 
     def __len__(self):
-        return self.n_samples
+        return len(self._patches)
 
     def __getitem__(self, idx) -> tuple[tv_tensors.Image, tv_tensors.Image]:
-        row = self.patches.iloc[idx]
+        x_tensor, y_tensor = self.get_raw(idx)
 
-        xy = torch.cat(
-            [
-                tv_io.read_image(str(row["path_x"])),
-                tv_io.read_image(str(row["path_y"])),
-            ],
-            0
-        )
+        if self._x_transform is not None: x_tensor = self._x_transform(x_tensor)
+        if self._y_transform is not None: y_tensor = self._y_transform(y_tensor)
 
-        if self.transform is not None:
-            xy = self.transform(xy)
+        return x_tensor, y_tensor  # type: ignore
 
-        x = xy[0:3, :, :].to(torch.float32) / 255.0
-        y = xy[3, :, :].long()
+    def get_raw(self, idx) -> tuple[tv_tensors.Image, tv_tensors.Image]:
+        row = self._patches.iloc[idx]
 
-        return tv_tensors.Image(x), tv_tensors.Image(y)
+        xy_tensor = torch.cat([tv_io.read_image(row["path_x"]), tv_io.read_image(row["path_y"])], 0)  # type: ignore
+        xy_tensor = xy_tensor[:, row["crop_y0"]:row["crop_y1"], row["crop_x0"]:row["crop_x1"]]  # type: ignore
+
+        if self._xy_transform is not None: xy_tensor = self._xy_transform(xy_tensor)
+
+        x_tensor = tv_tensors.Image(xy_tensor[0:3, :, :].to(torch.float32) / 255.0)
+        y_tensor = self._labels_lut[tv_tensors.Image(xy_tensor[3, :, :].long())]
+
+        return x_tensor, y_tensor  # type: ignore
+
+    def calc_stats(self) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
+        n_pixels = 0
+        x_sum = np.zeros(3)
+        x_sq_sum = np.zeros(3)
+        y_counts = np.zeros(len(dataset.label_id_to_name), dtype=np.int64)
+
+        for i in range(len(dataset)):
+            x, y = dataset[i]
+            x, y = x.numpy(), y.numpy()
+
+            n_pixels += x.shape[1] * x.shape[2]
+            x_sum += x.sum(axis=(1, 2))
+            x_sq_sum += (x ** 2).sum(axis=(1, 2))
+            y_counts += np.bincount(y.ravel(), minlength=len(dataset.label_id_to_name))
+
+        x_mean = x_sum / n_pixels
+        x_std = np.sqrt(x_sq_sum / n_pixels - (x_sum / n_pixels) ** 2)
+        label_counts = {dataset.label_id_to_name[i]: int(y_counts[i]) for i in range(len(y_counts))}
+
+        return x_mean, x_std, label_counts  # type: ignore
 
 
 # %%
 
 if __name__ == "__main__":
-    dataset = DatasetTreeAI(
-        "data/intermediate/patches_b.gpkg",
-        "data/intermediate/labels.csv",
-        "ID", "train",
-    )
+    dataset = DatasetTreeAI("ID", "train", 0)
+    dataset_stats = dataset.calc_stats()
 
     fig, ax = plt.subplots()
-    ax.bar(range(len(dataset.class_counts)), list(dataset.class_counts.values()))
-    ax.set_xticks(range(len(dataset.class_counts)), labels=dataset.class_counts.keys(), rotation=90)
+    ax.bar(range(len(dataset_stats[2])), list(dataset_stats[2].values()))
+    ax.set_xticks(range(len(dataset_stats[2])), labels=dataset_stats[2].keys(), rotation=90)
     ax.set_ylabel("class occurences")
     ax.spines[["right", "top"]].set_visible(False)
     fig.tight_layout()
     fig.show()
 
+    dataset_stats = {
+        "x_mean": list(dataset_stats[0]),
+        "x_std": list(dataset_stats[1]),
+        "y_counts": dataset_stats[2],
+    }
+
+    Path("data/dataset_stats.json").write_text(json.dumps(dataset_stats, indent=4))
+
 # %%
 
 if __name__ == "__main__":
-    seed(42)
-
-    basic_transform = tv_transforms.Compose([
-        tv_transforms.RandomHorizontalFlip(),
-        tv_transforms.RandomVerticalFlip(),
-        tv_transforms.RandomRotation([0, 360]),
-        tv_transforms.RandomCrop([512, 512]),
-    ])
-
     dataset = DatasetTreeAI(
-        "data/intermediate/patches_b.gpkg",
-        "data/intermediate/labels.csv",
-        "ID", "train",
-        transform=basic_transform
+        "ID", "train", 0,
+        xy_transform=tv_transforms.Compose([
+            tv_transforms.RandomHorizontalFlip(),
+            tv_transforms.RandomVerticalFlip(),
+            tv_transforms.RandomRotation([0, 90]),
+        ]),
+        x_transform=tv_transforms.Normalize([0.23, 0.38, 0.28], [0.19, 0.27, 0.23]),  # from dataset_stats.json
     )
 
     n_samples = 5
@@ -127,7 +157,7 @@ if __name__ == "__main__":
         x = x.numpy().transpose(1, 2, 0)
         y = y.numpy().transpose(1, 2, 0)
 
-        ax[0, i].imshow(x, cmap="gray")
+        ax[0, i].imshow((x - x.min()) / (x.max() - x.min()))
         ax[0, i].axis("off")
 
         vmin = min(dataset.label_id_to_name.keys())
