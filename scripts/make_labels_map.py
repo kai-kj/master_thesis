@@ -17,7 +17,7 @@ from dependencies.treeai_labels.treeai_labels import load_labels as treeai_load_
 countries_path = Path("/home/kai/Thesis/data/naturalearth/ne_10m_admin_0_countries.zip")
 assert countries_path.is_file()
 
-treeai = TreeAISegmentation("/home/kai/Thesis/data/treeai-segmentation/")
+treeai = TreeAISegmentation("/home/kai/Thesis/data/treeai_segmentation/")
 
 labels_map_path = Path("data/labels_map.csv")
 
@@ -28,6 +28,8 @@ rasters = treeai.get_rasters()
 sites = treeai.get_sites()
 species = treeai_load_labels()
 countries = gpd.read_file(countries_path)
+
+# trees = trees[trees["label_type"] == "full"].drop(columns=["label_name", "label_type", "site_id"])
 
 # %%
 
@@ -98,61 +100,66 @@ def make_site_summary(sites_source: pd.DataFrame, by: str, countries: list[str])
 
 
 countries_all = [
+    "Belgium",
     "Canada",
     "China",
+    "Czechia",
+    "Estonia",
     "Finland",
+    "France",
+    "Georgia",
     "Germany",
+    "Greece",
     "Iran",
     "Italy",
     "Japan",
     "Lithuania",
     "Mexico",
+    "Netherlands",
+    "New Zealand",
+    "Poland",
     "Portugal",
     "Russia",
     "Slovakia",
     "South Africa",
     "Spain",
+    "Sweden",
     "Switzerland",
     "Turkey",
+    "United Kingdom",
 ]
 
 countries_europe = [
+    "Belgium",
     # "Canada",
     # "China",
+    "Czechia",
+    "Estonia",
     "Finland",
+    "France",
+    # "Georgia",
     "Germany",
+    "Greece",
     # "Iran",
     "Italy",
     # "Japan",
     "Lithuania",
     # "Mexico",
+    "Netherlands",
+    # "New Zealand",
+    "Poland",
     "Portugal",
     # "Russia",
     "Slovakia",
     # "South Africa",
     "Spain",
+    "Sweden",
     "Switzerland",
     # "Turkey",
+    "United Kingdom",
 ]
 
-countries_other = [
-    # "Canada",
-    "China",
-    # "Finland",
-    # "Germany",
-    "Iran",
-    # "Italy",
-    "Japan",
-    # "Lithuania",
-    "Mexico",
-    # "Portugal",
-    "Russia",
-    # "Slovakia",
-    # "South Africa",
-    # "Spain",
-    # "Switzerland",
-    # "Turkey",
-]
+countries_other = list(set(countries_all) - set(countries_europe) - {"South Africa", "New Zealand", "Turkey"})
 
 species_by_country_europe = species_by_country[species_by_country["country"].isin(countries_europe)]
 genus_by_country_europe = genus_by_country[genus_by_country["country"].isin(countries_europe)]
@@ -232,16 +239,18 @@ fig.show()
 labels_list = [
     "Abies",
     "Acer",
+    # "Alnus", # mostly Portugal
     "Betula",
-    # "Castanea", # < 100
-    # "Cryptomeria", # only Japan
-    # "Eucalyptus", # only portugal
+    # "Cryptomeria",  # only Japan
+    # "Eucalyptus",  # only Portugal
     "Fagus",
     "Fraxinus",
     "Larix",
     "Picea",
     "Pinus",
+    # "Pistacia", only Iran
     "Populus",
+    # "Prunus", only Iran
     "Pseudotsuga",
     "Quercus",
     "Thuja",

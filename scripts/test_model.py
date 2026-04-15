@@ -19,7 +19,7 @@ from scripts.util.seed import seed
 
 # %%
 
-models_path = Path("models/20260402_185900")
+models_path = Path("models/20260414_100556")
 assert models_path.is_dir()
 
 dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
@@ -41,7 +41,7 @@ x_transform = tv_transforms.Compose([
 # dataset_test = DatasetTreeAI("ID", "train", 0, test_idx, x_transform=x_transform)
 # dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size, shuffle=True)
 
-dataset_test = DatasetTreeAI("ID", "test", 0, x_transform=x_transform)
+dataset_test = DatasetTreeAI("full", "ID", "test", 0, x_transform=x_transform)
 dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size, shuffle=True)
 
 # %%
@@ -69,7 +69,7 @@ for i in range(n_samples):
 
     x = x.numpy().transpose(1, 2, 0)
     x_raw = x_raw.numpy().transpose(1, 2, 0)
-    y_true = y_true.numpy().transpose(1, 2, 0)
+    y_true = y_true.numpy()
 
     # ax[0, i].imshow((x - x.min()) / (x.max() - x.min()))
     ax[0, i].imshow(x_raw)

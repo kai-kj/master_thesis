@@ -13,7 +13,7 @@ def run_batch_train(
         scaler: torch.amp.grad_scaler.GradScaler,
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
-        loss_fn: torch.nn.modules.loss._Loss,
+        loss_fn: torch.nn.Module,
         x: torch.Tensor,
         y_true: torch.Tensor,
 ) -> float:
@@ -36,7 +36,7 @@ def run_batch_train(
 def run_batch_valid(
         device: torch.device,
         model: torch.nn.Module,
-        loss_fn: torch.nn.modules.loss._Loss,
+        loss_fn: torch.nn.Module,
         x: torch.Tensor,
         y_true: torch.Tensor,
 ) -> float:
@@ -55,7 +55,7 @@ def run_epoch(
         device: torch.device,
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
-        loss_fn: torch.nn.modules.loss._Loss,
+        loss_fn: torch.nn.Module,
         dataloader_train: torch.utils.data.DataLoader,
         dataloader_valid: torch.utils.data.DataLoader,
         scaler: torch.amp.grad_scaler.GradScaler,

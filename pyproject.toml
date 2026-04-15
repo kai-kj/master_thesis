@@ -3,7 +3,7 @@ name = "tree"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = "==3.12"
+requires-python = "==3.12.*"
 dependencies = [
     "coldp>=2025.4.3",
     "distinctipy>=1.3.4",
@@ -20,6 +20,7 @@ dependencies = [
     "pillow>=12.1.1",
     "pyproj>=3.7.2",
     "python-dwca-reader>=0.16.4",
+    "pytorch-optimizer>=3.10.0",
     "rasterio>=1.5.0",
     "scikit-learn>=1.7.2",
     "scipy>=1.17.1",

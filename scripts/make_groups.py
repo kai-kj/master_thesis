@@ -24,7 +24,7 @@ assert countries_path.is_file()
 
 groups_path = Path("data/groups.csv")
 
-treeai = TreeAISegmentation("/home/kai/Thesis/data/treeai-segmentation/", pre_cache=True)
+treeai = TreeAISegmentation("/home/kai/Thesis/data/treeai_segmentation/", pre_cache=True)
 
 # %%
 
@@ -68,22 +68,16 @@ by_site = by_site[by_site["other_frac"] < other_frac_cutoff].drop(columns=["othe
 
 # %%
 
-site_grouping_cutoff = 0.65
+site_grouping_cutoff = 0.7
 
-ood_groups = [
-    2,  # Germany
-    4,  # Italy
-    7,  # Turkey
-    8,  # Spain
-    9,  # Switzerland
-    10,  # Finland
-    11,  # Japan
-    12, 16,  # Russia
-    14,  # China
-    15,  # Portugal
-    17,  # Slovakia
-    18,  # Mexico
-    19  # Czechia
+id_groups = [
+    0, 1, 14,  # Germany
+    4, 5,  # Italy
+    6, 7,  # Lithuania
+    13,  # Russia
+    21,  # Canada
+    25,  # Netherlands
+    31,  # Switzerland
 ]
 
 dist_matrix = pdist(np.sqrt((by_site / by_site.sum(axis=0)).values), metric="braycurtis")
@@ -104,7 +98,7 @@ by_group = by_site \
     .groupby("group_id") \
     .agg("sum")
 
-id_groups = list(set(groups["group_id"]) - set(ood_groups))
+ood_groups = list(set(groups["group_id"]) - set(id_groups))
 
 by_group = by_group.loc[id_groups + ood_groups, :]
 by_group_norm = by_group / by_group.sum(axis=0)
@@ -139,14 +133,14 @@ bottom = np.zeros_like(by_group.columns)
 
 for _, g in by_group.iterrows():
     data = np.array(g.tolist())
-    ax1.bar(xs, data, bottom=bottom, label=f"{g.name:02d}", hatch="xx" if g.name in ood_groups else "")
+    ax1.bar(xs, data, bottom=bottom, label=f"{g.name:02d}", hatch=".." if g.name in ood_groups else "")
     bottom += data
 
 bottom = np.zeros_like(by_group_norm.columns)
 
 for _, g in by_group_norm.iterrows():
     data = np.array(g.tolist())
-    ax2.bar(xs, data, bottom=bottom, label=f"{g.name:02d}", hatch="xx" if g.name in ood_groups else "")
+    ax2.bar(xs, data, bottom=bottom, label=f"{g.name:02d}", hatch=".." if g.name in ood_groups else "")
     bottom += data
 
 ax1.spines[["right", "top"]].set_visible(False)
@@ -161,6 +155,81 @@ ax2.set_ylabel("occurrences normalized")
 fig.tight_layout()
 fig.savefig("figures/sites_split.png")
 fig.show()
+
+# %%
+
+# id_countries = [
+#     # "Belgium",
+#     "Canada",
+#     # "China",
+#     # "Czechia",
+#     # "Estonia",
+#     # "Finland",
+#     # "France",
+#     # "Georgia",
+#     "Germany",
+#     # "Greece",
+#     # "Iran",
+#     # "Italy",
+#     # "Japan",
+#     "Lithuania",
+#     # "Mexico",
+#     # "Netherlands",
+#     # "Poland",
+#     # "Portugal",
+#     "Russia",
+#     # "Slovakia",
+#     # "Spain",
+#     # "Sweden",
+#     "Switzerland",
+#     # "Turkey",
+# ]
+#
+# by_country = by_site \
+#     .reset_index() \
+#     .merge(sites_ext[["site_id", "country"]], on="site_id", how="left") \
+#     .drop(columns=["site_id"]) \
+#     .groupby("country") \
+#     .agg("sum") \
+#     .reset_index()
+#
+# by_country["id"] = by_country["country"].apply(lambda c: c not in id_countries)
+# by_country = by_country.sort_values("id").drop(columns=["id"])
+#
+# by_country_norm = pd.DataFrame(by_country.iloc[:, 1:] / by_country.iloc[:, 1:].sum(axis=0))
+# by_country_norm.insert(0, "country", by_country["country"])
+#
+# fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+#
+# ax[0].set_prop_cycle(cycler(color=[get_hex(c) for c in get_colors(by_country.shape[0], pastel_factor=0.5, rng=0)]))
+# ax[1].set_prop_cycle(cycler(color=[get_hex(c) for c in get_colors(by_country.shape[0], pastel_factor=0.5, rng=0)]))
+#
+# xs = np.arange(by_country.shape[1] - 1)
+#
+# bottom_0 = np.zeros_like(xs, dtype=np.float64)
+# bottom_1 = np.zeros_like(xs, dtype=np.int64)
+#
+# for _, row in by_country_norm.iterrows():
+#     row = row.tolist()
+#     ax[0].bar(xs, row[1:], bottom=bottom_0, hatch=".." if row[0] in id_countries else None, label=row[0])
+#     bottom_0 += row[1:]
+#
+# for _, row in by_country.iterrows():
+#     row = row.tolist()
+#     ax[1].bar(xs, row[1:], bottom=bottom_1, hatch=".." if row[0] in id_countries else None, label=row[0])
+#     bottom_1 += row[1:]
+#
+# ax[0].set_xticks(xs, labels=by_country.columns[1:], rotation=90)
+# ax[0].spines[["right", "top"]].set_visible(False)
+# ax[0].set_ylabel("normlized count")
+#
+# ax[1].set_xticks(xs, labels=by_country.columns[1:], rotation=90)
+# ax[1].spines[["right", "top"]].set_visible(False)
+# ax[1].set_ylabel("count")
+# ax[1].legend(loc="upper right")
+#
+# fig.tight_layout()
+# fig.show()
 
 # %%
 

@@ -17,13 +17,13 @@ from dependencies.treeai_segmentation.treeai_segmentation import TreeAISegmentat
 # %%
 
 class DatasetTreeAI(torch.utils.data.Dataset):
-    TREEAI_SEGMENTATION_PATH = Path("/home/kai/Thesis/data/treeai-segmentation/")
+    TREEAI_SEGMENTATION_PATH = Path("/home/kai/Thesis/data/treeai_segmentation/")
     GROUPS_PATH = Path("data/groups.csv")
     LABELS_MAP_PATH = Path("data/labels_map.csv")
 
     def __init__(
             self,
-            id_or_ood: str, train_or_test: str, split_n: int,
+            label_type: str, id_or_ood: str, train_or_test: str, split_n: int,
             indices: None | list[int] = None,
             xy_transform: None | tv_transforms.Transform = None,
             x_transform: None | tv_transforms.Transform = None,
@@ -34,7 +34,8 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         assert self.TREEAI_SEGMENTATION_PATH.exists()
         assert self.GROUPS_PATH.exists()
         assert self.LABELS_MAP_PATH.exists()
-        assert id_or_ood in ["ID", "OOD"]
+        assert label_type in ["full", "partial", "both"]
+        assert id_or_ood in ["ID", "OOD", "both"]
         assert train_or_test in ["train", "test"]
         assert split_n in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
@@ -44,10 +45,15 @@ class DatasetTreeAI(torch.utils.data.Dataset):
             .merge(pd.read_csv(self.GROUPS_PATH)[["site_id", "dist"]], on="site_id") \
             .drop(columns=["geometry"])
 
-        self._patches = self._patches[self._patches["dist"] == id_or_ood]
+        if label_type != "both":
+            self._patches = self._patches[self._patches["label_type"] == label_type]
+
+        if id_or_ood != "both":
+            self._patches = self._patches[self._patches["dist"] == id_or_ood]
+
         self._patches = self._patches[self._patches[f"split_{split_n}"] == train_or_test]
 
-        self._patches = self._patches[["crop_x0", "crop_x1", "crop_y0", "crop_y1", "path_x", "path_y"]]
+        # self._patches = self._patches[["crop_x0", "crop_x1", "crop_y0", "crop_y1", "path_x", "path_y"]]
 
         if indices is not None:
             self._patches = self._patches.iloc[indices]
@@ -69,7 +75,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
     def __len__(self):
         return len(self._patches)
 
-    def __getitem__(self, idx) -> tuple[tv_tensors.Image, tv_tensors.Image]:
+    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
         x_tensor, y_tensor = self.get_raw(idx)
 
         if self._x_transform is not None: x_tensor = self._x_transform(x_tensor)
@@ -77,7 +83,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
         return x_tensor, y_tensor  # type: ignore
 
-    def get_raw(self, idx) -> tuple[tv_tensors.Image, tv_tensors.Image]:
+    def get_raw(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
         row = self._patches.iloc[idx]
 
         xy_tensor = torch.cat([tv_io.read_image(row["path_x"]), tv_io.read_image(row["path_y"])], 0)  # type: ignore
@@ -86,7 +92,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         if self._xy_transform is not None: xy_tensor = self._xy_transform(xy_tensor)
 
         x_tensor = tv_tensors.Image(xy_tensor[0:3, :, :].to(torch.float32) / 255.0)
-        y_tensor = self._labels_lut[tv_tensors.Image(xy_tensor[3, :, :].long())]
+        y_tensor = self._labels_lut[tv_tensors.Image(xy_tensor[3, :, :].long())].squeeze(0)
 
         return x_tensor, y_tensor  # type: ignore
 
@@ -115,7 +121,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 # %%
 
 if __name__ == "__main__":
-    dataset = DatasetTreeAI("ID", "train", 0)
+    dataset = DatasetTreeAI("both", "ID", "train", 0)
     dataset_stats = dataset.calc_stats()
 
     fig, ax = plt.subplots()
@@ -138,13 +144,13 @@ if __name__ == "__main__":
 
 if __name__ == "__main__":
     dataset = DatasetTreeAI(
-        "ID", "train", 0,
+        "both", "ID", "train", 0,
         xy_transform=tv_transforms.Compose([
             tv_transforms.RandomHorizontalFlip(),
             tv_transforms.RandomVerticalFlip(),
             tv_transforms.RandomRotation([0, 90]),
         ]),
-        x_transform=tv_transforms.Normalize([0.23, 0.38, 0.28], [0.19, 0.27, 0.23]),  # from dataset_stats.json
+        x_transform=tv_transforms.Normalize([0.22, 0.34, 0.26], [0.17, 0.26, 0.22]),  # from dataset_stats.json
     )
 
     n_samples = 5
@@ -155,7 +161,7 @@ if __name__ == "__main__":
         x, y = dataset[index]
 
         x = x.numpy().transpose(1, 2, 0)
-        y = y.numpy().transpose(1, 2, 0)
+        y = y.numpy()
 
         ax[0, i].imshow((x - x.min()) / (x.max() - x.min()))
         ax[0, i].axis("off")

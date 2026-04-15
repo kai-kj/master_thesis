@@ -6,8 +6,8 @@ import torch
 # %%
 
 class UNet(torch.nn.Module):
-    def __init__(self, n_classes):
-        super().__init__()
+    def __init__(self, n_classes, apply_softmax=False):
+        super(UNet, self).__init__()
 
         # in -> 1024x1024x3
         self.conv11 = torch.nn.Conv2d(3, 64, kernel_size=3, padding=1)  # -> 1024x1024x64
@@ -50,6 +50,8 @@ class UNet(torch.nn.Module):
         self.conv92 = torch.nn.Conv2d(64, 64, kernel_size=3, padding=1)  # -> 1024x1024x64
         self.conv93 = torch.nn.ConvTranspose2d(64, n_classes, kernel_size=1)  # -> 1024x1024xn_classes
 
+        self.apply_softmax = apply_softmax
+
     def forward(self, x11):
         x12 = torch.nn.functional.relu(self.conv11(x11))
         x13 = torch.nn.functional.relu(self.conv12(x12))
@@ -87,7 +89,7 @@ class UNet(torch.nn.Module):
         x93 = torch.nn.functional.relu(self.conv92(x92))
         x101 = self.conv93(x93)
 
-        return x101
+        return torch.nn.functional.softmax(x101, dim=1) if self.apply_softmax else x101
 
 
 # %%
