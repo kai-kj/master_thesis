@@ -9,6 +9,7 @@ import numpy as np
 import torchvision.transforms.v2 as tv_transforms
 import sklearn
 import json
+import shutil
 
 from scripts.util.train import run_epoch
 from scripts.models.unet import UNet
@@ -20,8 +21,8 @@ from scripts.util.seed import seed
 models_path = Path("models")
 assert models_path.is_dir()
 
-# base_model_path = None
-base_models_path = models_path / "20260402_172703"
+base_model_path = None
+# base_model_path = models_path / "20260402_172703"
 assert models_path is None or models_path.is_dir()
 
 dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
@@ -61,7 +62,25 @@ dataloader_valid = torch.utils.data.DataLoader(
     pin_memory=True, num_workers=4, prefetch_factor=2, persistent_workers=True
 )
 
+
 # %%
+
+def preview_lr(_scheduler: torch.optim.lr_scheduler.LRScheduler, _num_epochs: int):
+    lrs = []
+
+    for _ in range(_num_epochs):
+        lrs.append(_scheduler.get_last_lr()[0])
+        _scheduler.step()
+
+    fig, ax = plt.subplots()
+    ax.scatter(range(_num_epochs), lrs, marker=".")
+    ax.set_ylim(0)
+    ax.set_xlabel("epoch")
+    ax.set_ylabel("lr")
+    ax.spines[["top", "right"]].set_visible(False)
+    fig.tight_layout()
+    fig.show()
+
 
 class_counts = np.array(list(dataset_stats["y_counts"].values())) + 1  # avoid zero division
 class_freq = class_counts / np.sum(class_counts)
@@ -71,59 +90,77 @@ weights = weights / weights.sum() * weights.shape[0]
 
 model = UNet(len(dataset_stats["y_counts"])).to(device)
 
-if base_models_path is not None:
-    model.load_state_dict(torch.load(base_models_path / "model.pt"))
+if base_model_path is not None:
+    model.load_state_dict(torch.load(base_model_path / "model.pt"))
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+base_lr = 5e-4
+num_train_epochs = 100
+num_warmup_epochs = 0
+num_total_epochs = num_warmup_epochs + num_train_epochs
+
 loss_fn = torch.nn.CrossEntropyLoss(torch.Tensor(weights).to(device))
 scaler = torch.amp.grad_scaler.GradScaler(device=device.type)
+# scaler = None
+
+optimizer = torch.optim.Adam(model.parameters(), lr=base_lr)
+
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_train_epochs, eta_min=base_lr * 0.1)
+
+# scheduler = torch.optim.lr_scheduler.SequentialLR(
+#     optimizer,
+#     [
+#         torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=base_lr * 0.1, total_iters=num_warmup_epochs),
+#         torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_train_epochs, eta_min=base_lr * 0.1),
+#     ],
+#     [num_warmup_epochs],
+# )
+
+# preview_lr(scheduler, num_total_epochs)
 
 # %%
 
 model_path = models_path / time.strftime("%Y%m%d_%H%M%S")
 model_path.mkdir(parents=True, exist_ok=False)
 
-(model_path / "class.txt").write_text(str(type(model)))
+shutil.copy("scripts/train_unet_model.py", model_path / "train.py.txt")
 
-num_epochs = 25
-train_loss = []
-valid_loss = []
+history = []
 
 start_time = time.time()
 
-for epoch in range(num_epochs):
-    print(f"epoch {epoch + 1}/{num_epochs}")
+for epoch in range(num_total_epochs):
+    print(f"epoch {epoch + 1}/{num_total_epochs}")
 
-    curr_train_loss, curr_valid_loss = run_epoch(
+    curr_train_loss, curr_valid_loss, curr_lr = run_epoch(
         device,
         model,
-        optimizer, loss_fn,
+        optimizer, scheduler, loss_fn,
         dataloader_train, dataloader_valid,
         scaler
     )
 
     torch.save(model.state_dict(), model_path / "model.pt")
 
-    train_loss.append(curr_train_loss)
-    valid_loss.append(curr_valid_loss)
+    history.append((epoch, curr_lr, curr_train_loss, curr_valid_loss))
 
-    print(f"  train loss: {train_loss[-1]:.4f}\n  valid loss: {valid_loss[-1]:.4f}")
+    print(f"  curr_lr: {history[-1][1]:.6f}\n  train loss: {history[-1][2]:.6f}\n  valid loss: {history[-1][3]:.6f}\n")
 
-    if len(valid_loss) == 1 or valid_loss[-1] < np.min(valid_loss[:-1]):
+    if len(history) == 1 or history[-1][3] < np.min([h[3] for h in history[:-1]]):
         print("  best model, saving")
         torch.save(model.state_dict(), model_path / "model.pt")
 
-    if (epoch + 1) % 10 == 0 or epoch == num_epochs - 1:
+    if (epoch + 1) % 5 == 0 or epoch == num_total_epochs - 1:
         fig, ax = plt.subplots()
 
-        ax.plot(train_loss, label="train loss")
-        ax.plot(valid_loss, label="valid loss")
+        ax.plot([h[2] for h in history], label="train loss")
+        ax.plot([h[3] for h in history], label="valid loss")
 
-        ax.set_xlim(0, num_epochs)
+        ax.set_xlim(0, num_total_epochs)
         ax.set_xlabel("epoch")
         ax.set_ylabel("loss")
         ax.legend()
         ax.spines[["top", "right"]].set_visible(False)
+        ax.set_ylim(min(float(min(h[2], h[3])) for h in history), history[0][3])
 
         fig.tight_layout()
         fig.savefig(model_path / "loss.png")
@@ -131,20 +168,16 @@ for epoch in range(num_epochs):
 
     current_time = time.time()
     time_per_epoch = (current_time - start_time) / (epoch + 1)
-    remaining_time = time_per_epoch * (num_epochs - epoch - 1)
+    remaining_time = time_per_epoch * (num_total_epochs - epoch - 1)
 
     print(f"  {time.strftime("%H:%M:%S", time.gmtime(time_per_epoch))} per epoch")
     print(f"  {time.strftime("%H:%M:%S", time.gmtime(remaining_time))} remaining")
 
 end_time = time.time()
 
-loss = pd.DataFrame(
-    zip(list(i + 1 for i in range(len(train_loss))), train_loss, valid_loss),
-    columns=["epoch", "train_loss", "valid_loss"]
-)
-
+loss = pd.DataFrame(history, columns=["epoch", "lr", "train_loss", "valid_loss"])
 loss.to_csv(model_path / "loss.csv", index=False)
 
 duration = time.strftime("%H:%M:%S", time.gmtime(end_time - start_time))
 
-print(f"done, training time for {num_epochs} epochs: {duration}")
+print(f"done, training time for {num_total_epochs} epochs: {duration}")

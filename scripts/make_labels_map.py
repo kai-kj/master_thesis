@@ -17,7 +17,7 @@ from dependencies.treeai_labels.treeai_labels import load_labels as treeai_load_
 countries_path = Path("/home/kai/Thesis/data/naturalearth/ne_10m_admin_0_countries.zip")
 assert countries_path.is_file()
 
-treeai = TreeAISegmentation("/home/kai/Thesis/data/treeai-segmentation/")
+treeai = TreeAISegmentation("/home/kai/Thesis/data/treeai_segmentation/")
 
 labels_map_path = Path("data/labels_map.csv")
 
@@ -267,6 +267,7 @@ labels["model_label_id"] = labels["model_label_name"].apply(lambda n: labels_lis
 labels["model_label_name"] = labels["model_label_name"].apply(lambda n: n.replace(" ", "_").lower())
 
 labels = labels[["data_label_id", "data_label_name", "model_label_id", "model_label_name"]]
+labels = labels.sort_values(["model_label_id", "data_label_id"])
 
 # %%
 

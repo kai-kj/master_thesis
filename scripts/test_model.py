@@ -19,7 +19,7 @@ from scripts.util.seed import seed
 
 # %%
 
-models_path = Path("models/20260402_185900")
+models_path = Path("models/20260420_185850")
 assert models_path.is_dir()
 
 dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
@@ -71,8 +71,7 @@ for i in range(n_samples):
     x_raw = x_raw.numpy().transpose(1, 2, 0)
     y_true = y_true.numpy().transpose(1, 2, 0)
 
-    # ax[0, i].imshow((x - x.min()) / (x.max() - x.min()))
-    ax[0, i].imshow(x_raw)
+    ax[0, i].imshow((x - x.min()) / (x.max() - x.min()))
     ax[0, i].axis("off")
     ax[0, i].set_title(f"sample {index}")
 
@@ -135,6 +134,8 @@ fig.show()
 metrics = []
 
 for metric in ["micro", "macro", "weighted"]:
+    print(f"computing {metric} metrics")
+
     p = skm.precision_score(ys_true.flatten(), ys_pred.flatten(), average=metric, zero_division=0.0)  # type: ignore
     r = skm.recall_score(ys_true.flatten(), ys_pred.flatten(), average=metric, zero_division=0.0)  # type: ignore
     f1 = skm.f1_score(ys_true.flatten(), ys_pred.flatten(), average=metric, zero_division=0.0)  # type: ignore

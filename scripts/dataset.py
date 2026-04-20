@@ -10,6 +10,7 @@ import torchvision.io as tv_io
 import torchvision.transforms.v2 as tv_transforms
 import numpy as np
 import json
+import geopandas as gpd
 
 from dependencies.treeai_segmentation.treeai_segmentation import TreeAISegmentation
 
@@ -17,8 +18,8 @@ from dependencies.treeai_segmentation.treeai_segmentation import TreeAISegmentat
 # %%
 
 class DatasetTreeAI(torch.utils.data.Dataset):
-    TREEAI_SEGMENTATION_PATH = Path("/home/kai/Thesis/data/treeai-segmentation/")
-    GROUPS_PATH = Path("data/groups.csv")
+    TREEAI_SEGMENTATION_PATH = Path("/home/kai/Thesis/data/treeai_segmentation/")
+    SITE_SPLIT_PATH = Path("data/sites_split.gpkg")
     LABELS_MAP_PATH = Path("data/labels_map.csv")
 
     def __init__(
@@ -32,7 +33,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         super(DatasetTreeAI, self).__init__()
 
         assert self.TREEAI_SEGMENTATION_PATH.exists()
-        assert self.GROUPS_PATH.exists()
+        assert self.SITE_SPLIT_PATH.exists()
         assert self.LABELS_MAP_PATH.exists()
         assert id_or_ood in ["ID", "OOD"]
         assert train_or_test in ["train", "test"]
@@ -41,7 +42,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         self._treeai = TreeAISegmentation(self.TREEAI_SEGMENTATION_PATH)
 
         self._patches = self._treeai.get_patches_512x512_ext() \
-            .merge(pd.read_csv(self.GROUPS_PATH)[["site_id", "dist"]], on="site_id") \
+            .merge(gpd.read_file(self.SITE_SPLIT_PATH)[["site_id", "dist"]], on="site_id") \
             .drop(columns=["geometry"])
 
         self._patches = self._patches[self._patches["dist"] == id_or_ood]
@@ -144,7 +145,7 @@ if __name__ == "__main__":
             tv_transforms.RandomVerticalFlip(),
             tv_transforms.RandomRotation([0, 90]),
         ]),
-        x_transform=tv_transforms.Normalize([0.23, 0.38, 0.28], [0.19, 0.27, 0.23]),  # from dataset_stats.json
+        x_transform=tv_transforms.Normalize([0.24, 0.38, 0.29], [0.19, 0.27, 0.24]),  # from dataset_stats.json
     )
 
     n_samples = 5
