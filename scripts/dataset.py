@@ -1,15 +1,17 @@
 # %%
 
-import matplotlib.pyplot as plt
 import random
+from pathlib import Path
+import json
+
+import sklearn
+import matplotlib.pyplot as plt
 import pandas as pd
 import torch
-from pathlib import Path
 from torchvision import tv_tensors
 import torchvision.io as tv_io
 import torchvision.transforms.v2 as tv_transforms
 import numpy as np
-import json
 import geopandas as gpd
 
 from dependencies.treeai_segmentation.treeai_segmentation import TreeAISegmentation
@@ -38,6 +40,11 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         assert id_or_ood in ["ID", "OOD"]
         assert train_or_test in ["train", "test"]
         assert split_n in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+        self._config = {  # for when calling .split()
+            "id_or_ood": id_or_ood, "train_or_test": train_or_test, "split_n": split_n,
+            "xy_transform": xy_transform, "x_transform": x_transform, "y_transform": y_transform,
+        }
 
         self._treeai = TreeAISegmentation(self.TREEAI_SEGMENTATION_PATH)
 
@@ -70,7 +77,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
     def __len__(self):
         return len(self._patches)
 
-    def __getitem__(self, idx) -> tuple[tv_tensors.Image, tv_tensors.Image]:
+    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
         x_tensor, y_tensor = self.get_raw(idx)
 
         if self._x_transform is not None: x_tensor = self._x_transform(x_tensor)
@@ -78,7 +85,28 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
         return x_tensor, y_tensor  # type: ignore
 
-    def get_raw(self, idx) -> tuple[tv_tensors.Image, tv_tensors.Image]:
+    def split(self, test_size: float, random_state: int | None = None) -> tuple["DatasetTreeAI", "DatasetTreeAI"]:
+        train_idx, test_idx = sklearn.model_selection.train_test_split(
+            range(len(self)), test_size=test_size, random_state=random_state
+        )
+
+        train_dataset = DatasetTreeAI(indices=train_idx, **self._config)
+        test_dataset = DatasetTreeAI(indices=test_idx, **self._config)
+
+        return train_dataset, test_dataset
+
+    def loader(
+            self, batch_size: int,
+            num_workers: int = 4,
+            prefetch_factor: int = 2
+    ) -> torch.utils.data.DataLoader:
+        return torch.utils.data.DataLoader(
+            self,
+            batch_size=batch_size, shuffle=True,
+            pin_memory=True, num_workers=num_workers, prefetch_factor=prefetch_factor, persistent_workers=True
+        )
+
+    def get_raw(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
         row = self._patches.iloc[idx]
 
         xy_tensor = torch.cat([tv_io.read_image(row["path_x"]), tv_io.read_image(row["path_y"])], 0)  # type: ignore
@@ -87,7 +115,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         if self._xy_transform is not None: xy_tensor = self._xy_transform(xy_tensor)
 
         x_tensor = tv_tensors.Image(xy_tensor[0:3, :, :].to(torch.float32) / 255.0)
-        y_tensor = self._labels_lut[tv_tensors.Image(xy_tensor[3, :, :].long())]
+        y_tensor = self._labels_lut[tv_tensors.Image(xy_tensor[3, :, :].long())].squeeze(0)
 
         return x_tensor, y_tensor  # type: ignore
 
@@ -156,7 +184,7 @@ if __name__ == "__main__":
         x, y = dataset[index]
 
         x = x.numpy().transpose(1, 2, 0)
-        y = y.numpy().transpose(1, 2, 0)
+        y = y.numpy()
 
         ax[0, i].imshow((x - x.min()) / (x.max() - x.min()))
         ax[0, i].axis("off")
@@ -172,3 +200,32 @@ if __name__ == "__main__":
 
     fig.tight_layout()
     fig.show()
+
+    # %%
+    #
+    # if __name__ == "__main__":
+    #     dataset = DatasetTreeAI(
+    #         "ID", "train", 0,
+    #         xy_transform=tv_transforms.Compose([
+    #             tv_transforms.RandomHorizontalFlip(),
+    #             tv_transforms.RandomVerticalFlip(),
+    #             tv_transforms.RandomRotation([0, 90]),
+    #         ]),
+    #         x_transform=tv_transforms.Normalize([0.24, 0.38, 0.29], [0.19, 0.27, 0.24]),  # from dataset_stats.json
+    #         y_transform=tv_transforms.Compose([
+    #             tv_transforms.Lambda(
+    #                 lambda y: torch.nn.functional \
+    #                     .one_hot(y.long(), num_classes=18) \
+    #                     .permute(2, 0, 1).float()
+    #             )
+    #         ]),
+    #     )
+
+    x, y = dataset[0]
+
+    print(x.shape)
+    print(y.shape)
+
+    yy = y.argmax(dim=0)
+
+    print(yy.shape)

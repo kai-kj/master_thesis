@@ -20,6 +20,7 @@ dependencies = [
     "pillow>=12.1.1",
     "pyproj>=3.7.2",
     "python-dwca-reader>=0.16.4",
+    "pytorch-optimizer>=3.10.0",
     "rasterio>=1.5.0",
     "scikit-learn>=1.7.2",
     "scipy>=1.17.1",

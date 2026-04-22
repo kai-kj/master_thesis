@@ -19,7 +19,7 @@ from scripts.util.seed import seed
 
 # %%
 
-models_path = Path("models/20260420_185850")
+models_path = Path("models/20260420_221930")
 assert models_path.is_dir()
 
 dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())

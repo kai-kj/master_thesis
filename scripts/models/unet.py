@@ -5,92 +5,153 @@ import torch
 
 # %%
 
+class ConvReLU(torch.nn.Module):
+    def __init__(
+            self,
+            in_ch: int, out_ch: int,
+            kernel_size: int = 3, stride: int = 1, padding: int = 1, dilation: int = 1,
+            norm="none"
+    ):
+        super().__init__()
+
+        if norm == "none":
+            self.seq = torch.nn.Sequential(
+                torch.nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, dilation),
+                torch.nn.ReLU(inplace=True),
+            )
+        elif norm == "group":
+            self.seq = torch.nn.Sequential(
+                torch.nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, dilation),
+                torch.nn.GroupNorm(self.get_num_groups(in_ch), out_ch),
+                torch.nn.ReLU(inplace=True),
+            )
+        # elif norm == "batch":
+        #     self.seq = torch.nn.Sequential(
+        #         torch.nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, dilation),
+        #         torch.nn.BatchNorm2d(out_ch),
+        #         torch.nn.ReLU(),
+        #     )
+        else:
+            raise NotImplementedError("norm must be \"none\", \"group\", or \"batch\"")
+
+    def forward(self, x):
+        return self.seq(x)
+
+    def get_num_groups(self, in_ch: int) -> int:
+        for g in [8, 4, 2]:
+            if in_ch % g == 0:
+                return g
+
+        return 1
+
+        # %%
+
+
 class UNet(torch.nn.Module):
-    def __init__(self, n_classes):
+    def __init__(self, n_classes, apply_softmax: bool = False, norm: str = "none"):
         super().__init__()
 
         # in -> 1024x1024x3
-        self.conv11 = torch.nn.Conv2d(3, 64, kernel_size=3, padding=1)  # -> 1024x1024x64
-        self.conv12 = torch.nn.Conv2d(64, 64, kernel_size=3, padding=1)  # -> 1024x1024x64
+        self.conv11 = ConvReLU(3, 64, norm=norm)  # -> 1024x1024x64
+        self.conv12 = ConvReLU(64, 64, norm=norm)  # -> 1024x1024x64
         self.pool1 = torch.nn.MaxPool2d(kernel_size=2, stride=2)  # -> 512x512x64
 
-        self.conv21 = torch.nn.Conv2d(64, 128, kernel_size=3, padding=1)  # -> 512x512x128
-        self.conv22 = torch.nn.Conv2d(128, 128, kernel_size=3, padding=1)  # -> 512x512x128
+        self.conv21 = ConvReLU(64, 128, norm=norm)  # -> 512x512x128
+        self.conv22 = ConvReLU(128, 128, norm=norm)  # -> 512x512x128
         self.pool2 = torch.nn.MaxPool2d(kernel_size=2, stride=2)  # -> 256x256x128
 
-        self.conv31 = torch.nn.Conv2d(128, 256, kernel_size=3, padding=1)  # -> 256x256x256
-        self.conv32 = torch.nn.Conv2d(256, 256, kernel_size=3, padding=1)  # -> 256x256x256
+        self.conv31 = ConvReLU(128, 256, norm=norm)  # -> 256x256x256
+        self.conv32 = ConvReLU(256, 256, norm=norm)  # -> 256x256x256
         self.pool3 = torch.nn.MaxPool2d(kernel_size=2, stride=2)  # -> 128x128x256
 
-        self.conv41 = torch.nn.Conv2d(256, 512, kernel_size=3, padding=1)  # -> 128x128x512
-        self.conv42 = torch.nn.Conv2d(512, 512, kernel_size=3, padding=1)  # -> 128x128x512
+        self.conv41 = ConvReLU(256, 512, norm=norm)  # -> 128x128x512
+        self.conv42 = ConvReLU(512, 512, norm=norm)  # -> 128x128x512
         self.pool4 = torch.nn.MaxPool2d(kernel_size=2, stride=2)  # -> 64x64x512
 
-        self.conv51 = torch.nn.Conv2d(512, 1024, kernel_size=3, padding=1)  # -> 64x64x1024
-        self.conv52 = torch.nn.Conv2d(1024, 1024, kernel_size=3, padding=1)  # -> 64x64x1024
+        self.conv51 = ConvReLU(512, 1024, norm=norm)  # -> 64x64x1024
+        self.conv52 = ConvReLU(1024, 1024, norm=norm)  # -> 64x64x1024
         self.up5 = torch.nn.ConvTranspose2d(1024, 512, kernel_size=2, stride=2)  # -> 128x128x512
 
         # (cat -> 128x128x1024)
-        self.conv61 = torch.nn.Conv2d(1024, 512, kernel_size=3, padding=1)  # -> 128x128x512
-        self.conv62 = torch.nn.Conv2d(512, 512, kernel_size=3, padding=1)  # -> 128x128x512
+        self.conv61 = ConvReLU(1024, 512, norm=norm)  # -> 128x128x512
+        self.conv62 = ConvReLU(512, 512, norm=norm)  # -> 128x128x512
         self.up6 = torch.nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2)  # -> 256x256x256
 
         # (cat -> 256x256x512)
-        self.conv71 = torch.nn.Conv2d(512, 256, kernel_size=3, padding=1)  # -> 256x256x256
-        self.conv72 = torch.nn.Conv2d(256, 256, kernel_size=3, padding=1)  # -> 256x256x256
+        self.conv71 = ConvReLU(512, 256, norm=norm)  # -> 256x256x256
+        self.conv72 = ConvReLU(256, 256, norm=norm)  # -> 256x256x256
         self.up7 = torch.nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)  # -> 512x512x128
 
         # (cat -> 512x512x256)
-        self.conv81 = torch.nn.Conv2d(256, 128, kernel_size=3, padding=1)  # -> 512x512x128
-        self.conv82 = torch.nn.Conv2d(128, 128, kernel_size=3, padding=1)  # -> 512x512x128
+        self.conv81 = ConvReLU(256, 128, norm=norm)  # -> 512x512x128
+        self.conv82 = ConvReLU(128, 128, norm=norm)  # -> 512x512x128
         self.up8 = torch.nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)  # -> 1024x1024x64
 
         # (cat -> 1024x1024x128)
-        self.conv91 = torch.nn.Conv2d(128, 64, kernel_size=3, padding=1)  # -> 1024x1024x64
-        self.conv92 = torch.nn.Conv2d(64, 64, kernel_size=3, padding=1)  # -> 1024x1024x64
+        self.conv91 = ConvReLU(128, 64, norm=norm)  # -> 1024x1024x64
+        self.conv92 = ConvReLU(64, 64, norm=norm)  # -> 1024x1024x64
         self.conv93 = torch.nn.ConvTranspose2d(64, n_classes, kernel_size=1)  # -> 1024x1024xn_classes
 
+        self.apply_softmax = apply_softmax
+
     def forward(self, x11):
-        x12 = torch.nn.functional.relu(self.conv11(x11))
-        x13 = torch.nn.functional.relu(self.conv12(x12))
+        x12 = self.conv11(x11)
+        x13 = self.conv12(x12)
         x21 = self.pool1(x13)
 
-        x22 = torch.nn.functional.relu(self.conv21(x21))
-        x23 = torch.nn.functional.relu(self.conv22(x22))
+        x22 = self.conv21(x21)
+        x23 = self.conv22(x22)
         x31 = self.pool2(x23)
 
-        x32 = torch.nn.functional.relu(self.conv31(x31))
-        x33 = torch.nn.functional.relu(self.conv32(x32))
+        x32 = self.conv31(x31)
+        x33 = self.conv32(x32)
         x41 = self.pool3(x33)
 
-        x42 = torch.nn.functional.relu(self.conv41(x41))
-        x43 = torch.nn.functional.relu(self.conv42(x42))
+        x42 = self.conv41(x41)
+        x43 = self.conv42(x42)
         x51 = self.pool4(x43)
 
-        x52 = torch.nn.functional.relu(self.conv51(x51))
-        x53 = torch.nn.functional.relu(self.conv52(x52))
+        x52 = self.conv51(x51)
+        x53 = self.conv52(x52)
         x61 = torch.cat((self.up5(x53), x43), dim=1)
 
-        x62 = torch.nn.functional.relu(self.conv61(x61))
-        x63 = torch.nn.functional.relu(self.conv62(x62))
+        x62 = self.conv61(x61)
+        x63 = self.conv62(x62)
         x71 = torch.cat((self.up6(x63), x33), dim=1)
 
-        x72 = torch.nn.functional.relu(self.conv71(x71))
-        x73 = torch.nn.functional.relu(self.conv72(x72))
+        x72 = self.conv71(x71)
+        x73 = self.conv72(x72)
         x81 = torch.cat((self.up7(x73), x23), dim=1)
 
-        x82 = torch.nn.functional.relu(self.conv81(x81))
-        x83 = torch.nn.functional.relu(self.conv82(x82))
+        x82 = self.conv81(x81)
+        x83 = self.conv82(x82)
         x91 = torch.cat((self.up8(x83), x13), dim=1)
 
-        x92 = torch.nn.functional.relu(self.conv91(x91))
-        x93 = torch.nn.functional.relu(self.conv92(x92))
+        x92 = self.conv91(x91)
+        x93 = self.conv92(x92)
         x101 = self.conv93(x93)
 
-        return x101
+        return torch.nn.functional.softmax(x101, dim=1) if self.apply_softmax else x101
 
+    def get_encoder_modules(self) -> list[torch.nn.Module]:
+        return [
+            self.conv11, self.conv12,
+            self.conv21, self.conv22,
+            self.conv31, self.conv32,
+            self.conv41, self.conv42,
+        ]
 
-# %%
+    def get_decoder_modules(self) -> list[torch.nn.Module]:
+        return [
+            self.up5, self.conv61, self.conv62,
+            self.up6, self.conv71, self.conv72,
+            self.up7, self.conv81, self.conv82,
+            self.up8, self.conv91, self.conv92,
+            self.conv93,
+        ]
+
+    # %%
+
 
 if __name__ == "__main__":
     from scripts.dataset import DatasetTreeAI
@@ -98,15 +159,16 @@ if __name__ == "__main__":
     dataset = DatasetTreeAI("ID", "train", 0)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
 
-    model = UNet(len(dataset.label_id_to_name))
-    model.eval()
+    for norm in ["none", "group"]:
+        model = UNet(len(dataset.label_id_to_name), norm=norm)
+        model.eval()
 
-    torch.onnx.export(
-        model,
-        (next(iter(dataloader))[0],),
-        "models/untrained_onnx/unet.onnx",
-        input_names=["input"],
-        output_names=["output"],
-        external_data=False,
-        dynamo=True,
-    )
+        torch.onnx.export(
+            model,
+            (next(iter(dataloader))[0],),
+            f"models/untrained_onnx/unet_{norm}.onnx",
+            input_names=["input"],
+            output_names=["output"],
+            external_data=False,
+            dynamo=True,
+        )

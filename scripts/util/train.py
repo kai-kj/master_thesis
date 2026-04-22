@@ -1,19 +1,19 @@
 # %%
 
+import gc
 import numpy as np
 import torch
 from tqdm.auto import tqdm
-import gc
 
 
 # %%
 
 def run_batch_train(
         device: torch.device,
-        scaler: torch.amp.grad_scaler.GradScaler | None,
+        scaler: torch.amp.grad_scaler.GradScaler,
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
-        loss_fn: torch.nn.modules.loss._Loss,
+        loss_fn: torch.nn.Module,
         x: torch.Tensor,
         y_true: torch.Tensor,
 ) -> float:
@@ -26,13 +26,9 @@ def run_batch_train(
         y_pred = model(x)
         y_loss = loss_fn(y_pred, y_true)
 
-    if scaler is not None:
-        scaler.scale(y_loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-    else:
-        y_loss.backward()
-        optimizer.step()
+    scaler.scale(y_loss).backward()
+    scaler.step(optimizer)
+    scaler.update()
 
     return y_loss.item()
 
@@ -40,7 +36,7 @@ def run_batch_train(
 def run_batch_valid(
         device: torch.device,
         model: torch.nn.Module,
-        loss_fn: torch.nn.modules.loss._Loss,
+        loss_fn: torch.nn.Module,
         x: torch.Tensor,
         y_true: torch.Tensor,
 ) -> float:
@@ -59,12 +55,12 @@ def run_epoch(
         device: torch.device,
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
-        scheduler: torch.optim.lr_scheduler.LRScheduler | None,
-        loss_fn: torch.nn.modules.loss._Loss,
+        scheduler: torch.optim.lr_scheduler.LRScheduler,
+        loss_fn: torch.nn.Module,
         dataloader_train: torch.utils.data.DataLoader,
         dataloader_valid: torch.utils.data.DataLoader,
-        scaler: torch.amp.grad_scaler.GradScaler | None,
-) -> tuple[float, float, float | None]:
+        scaler: torch.amp.grad_scaler.GradScaler,
+) -> tuple[float, float, float]:
     train_loss = []
     valid_loss = []
 
@@ -80,9 +76,6 @@ def run_epoch(
 
     gc.collect()
 
-    if scheduler is not None:
-        scheduler.step()
+    scheduler.step()
 
-    last_lr = scheduler.get_last_lr()[0] if scheduler is not None else None
-
-    return float(np.mean(train_loss)), float(np.mean(valid_loss)), last_lr
+    return float(np.mean(train_loss)), float(np.mean(valid_loss)), scheduler.get_last_lr()[0]
