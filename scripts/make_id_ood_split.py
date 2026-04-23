@@ -20,7 +20,7 @@ assert countries_path.is_file()
 
 sites_split_path = Path("data/sites_split.gpkg")
 
-treeai = TreeAISegmentation("/home/kai/Thesis/data/treeai_segmentation_old_old/", pre_cache=True)
+treeai = TreeAISegmentation("/home/kai/Thesis/data/treeai_segmentation/", pre_cache=True)
 
 # %%
 
@@ -129,6 +129,7 @@ ax[1].set_ylabel("count")
 ax[1].legend(loc="upper right")
 
 fig.tight_layout()
+fig.savefig("figures/id_ood_split.png")
 fig.show()
 
 # %%

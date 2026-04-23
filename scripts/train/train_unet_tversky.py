@@ -5,8 +5,8 @@ import time
 import torch
 import torchvision.transforms.v2 as tv_transforms
 import json
-from pytorch_optimizer.loss import focal as focal_loss_fn
 
+from scripts.loss import FocalTverskyLoss
 from scripts.train.train import run_loop
 from scripts.models.unet import UNet
 from scripts.dataset import DatasetTreeAI
@@ -46,12 +46,12 @@ dataloader_valid = dataset_valid.loader(batch_size)
 
 # %%
 
-base_lr = 5e-4
+base_lr = 2.5e-4
 num_epochs = 100
 
 device = torch.device("cuda")
 model = UNet(len(dataset_stats["y_counts"]), norm="group").to(device)
-loss_fn = focal_loss_fn.FocalTverskyLoss(alpha=0.3, beta=0.7, gamma=1.33).to(device)
+loss_fn = FocalTverskyLoss(alpha=0.3, beta=0.7, gamma=1.33).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=base_lr)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=base_lr * 0.01)
 

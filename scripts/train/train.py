@@ -98,7 +98,7 @@ def run_loop(
 ):
     print(f"training model {model_path.name}")
 
-    model_path.parent.mkdir(parents=True, exist_ok=True)
+    model_path.mkdir(parents=True, exist_ok=True)
 
     start_time = time.time()
     scaler = torch.amp.grad_scaler.GradScaler(device=device.type)

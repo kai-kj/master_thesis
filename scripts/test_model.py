@@ -19,8 +19,8 @@ from scripts.util.seed import seed
 
 # %%
 
-models_path = Path("models/20260420_221930")
-assert models_path.is_dir()
+model_path = Path("models/20260422_204630")
+assert model_path.is_dir()
 
 dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
 
@@ -35,19 +35,13 @@ x_transform = tv_transforms.Compose([
     tv_transforms.Normalize(dataset_stats["x_mean"], dataset_stats["x_std"]),
 ])
 
-# dataset_all = DatasetTreeAI("ID", "train", 0)
-# _, test_idx = sklearn.model_selection.train_test_split(range(len(dataset_all)), test_size=0.2)
-#
-# dataset_test = DatasetTreeAI("ID", "train", 0, test_idx, x_transform=x_transform)
-# dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size, shuffle=True)
-
 dataset_test = DatasetTreeAI("ID", "test", 0, x_transform=x_transform)
 dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size, shuffle=True)
 
 # %%
 
-model = UNet(len(dataset_stats["y_counts"])).to(device)
-model.load_state_dict(torch.load(models_path / "model.pt"))
+model = UNet(len(dataset_stats["y_counts"]), norm="group").to(device)
+model.load_state_dict(torch.load(model_path / "model.pt"))
 model.eval()
 
 # %%
@@ -69,7 +63,7 @@ for i in range(n_samples):
 
     x = x.numpy().transpose(1, 2, 0)
     x_raw = x_raw.numpy().transpose(1, 2, 0)
-    y_true = y_true.numpy().transpose(1, 2, 0)
+    y_true = y_true.numpy()
 
     ax[0, i].imshow((x - x.min()) / (x.max() - x.min()))
     ax[0, i].axis("off")
@@ -90,7 +84,7 @@ for i in range(n_samples):
     ax[2, i].axis("off")
 
 fig.tight_layout()
-fig.savefig(models_path / "results.png")
+fig.savefig(model_path / "results.png")
 fig.show()
 
 # %%
@@ -126,7 +120,7 @@ ax.set_xlabel("Predicted label")
 ax.set_ylabel("True label")
 
 fig.tight_layout()
-fig.savefig(models_path / "confusion_matrix.png")
+fig.savefig(model_path / "confusion_matrix.png")
 fig.show()
 
 # %%
@@ -147,4 +141,4 @@ metrics = pd.DataFrame(metrics, columns=["metric", "precision", "recall", "f1", 
 
 print(metrics)
 
-metrics.to_csv(models_path / "metrics.csv")
+metrics.to_csv(model_path / "metrics.csv")
