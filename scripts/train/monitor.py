@@ -7,7 +7,7 @@ import pandas as pd
 
 # %%
 
-model_path = Path("models/20260422_204630")
+model_path = Path("models/20260424_173050")
 assert model_path.is_dir()
 
 # %%
@@ -35,7 +35,7 @@ p3, = ax2.plot(history["lr"], color=color_cycle[2], linestyle="--", label="learn
 ax1.set_xlabel("epoch")
 ax1.set_ylabel("loss")
 ax1.spines[["top"]].set_visible(False)
-ax1.legend(handles=[p1, p2, p3], loc="upper right", )
+ax1.legend(handles=[p1, p2, p3], loc="upper right", frameon=False)
 
 ax2_ylim_margin = (ax2.get_ylim()[1] - ax2.get_ylim()[0]) * 0.125
 ax2.set_ylim(max(0, ax2.get_ylim()[0] - ax2_ylim_margin), ax2.get_ylim()[1] + ax2_ylim_margin)
@@ -43,5 +43,5 @@ ax2.set_ylabel("learning rate")
 ax2.spines[["top"]].set_visible(False)
 
 fig.tight_layout()
-fig.savefig(model_path / "loss_full.png")
+fig.savefig(model_path / "loss.png")
 fig.show()

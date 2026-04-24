@@ -19,7 +19,7 @@ from scripts.util.seed import seed
 
 # %%
 
-model_path = Path("models/20260422_204630")
+model_path = Path("models/20260424_173050")
 assert model_path.is_dir()
 
 dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
@@ -40,8 +40,7 @@ dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_siz
 
 # %%
 
-model = UNet(len(dataset_stats["y_counts"]), norm="group").to(device)
-model.load_state_dict(torch.load(model_path / "model.pt"))
+model = UNet.load(model_path / "model.json", model_path / "model.pt").to(device)
 model.eval()
 
 # %%

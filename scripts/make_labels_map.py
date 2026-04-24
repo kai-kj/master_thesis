@@ -221,7 +221,7 @@ fig, ax = plt.subplots(2, 1, figsize=(12, 8))
 make_hist(ax[0], species_by_region, label_rot=90, legend_cols=3)
 ax[0].set_title("By species")
 make_hist(ax[1], genus_by_region, label_rot=90)
-ax[1].axhline([100], color="orange", linestyle="dashed")
+ax[1].axhline([1000], color="orange", linestyle="dashed")
 ax[1].set_title("By genus")
 fig.tight_layout()
 fig.savefig("figures/species_genus_world.png")
@@ -237,19 +237,19 @@ labels_list = [
     # "Cryptomeria", # only Japan
     # "Eucalyptus", # only portugal
     "Fagus",
-    "Fraxinus",
-    "Larix",
+    # "Fraxinus", # < 1000
+    # "Larix",
     "Picea",
     "Pinus",
     "Populus",
-    "Pseudotsuga",
+    # "Pseudotsuga", # < 1000
     "Quercus",
     "Thuja",
-    "Tilia",
-    "Tsuga",
+    # "Tilia",  # < 1000
+    # "Tsuga",  # < 1000
 ]
 
-labels_list = ["Background full", "Background part", "Other", "Dead"] + labels_list
+labels_list = ["Background", "Other", "Dead"] + labels_list
 
 labels = treeai \
     .get_labels() \
@@ -259,8 +259,8 @@ labels = treeai \
 
 labels["model_label_name"] = labels["genus_name"].apply(lambda n: n if n in labels_list else "Other")
 
-labels.loc[labels["data_label_name"] == "Fully labeled background", "model_label_name"] = "Background full"
-labels.loc[labels["data_label_name"] == "Partially labeled background", "model_label_name"] = "Background part"
+labels.loc[labels["data_label_name"] == "Fully labeled background", "model_label_name"] = "Background"
+labels.loc[labels["data_label_name"] == "Partially labeled background", "model_label_name"] = "Background"
 labels.loc[labels["data_label_name"] == "Dead tree", "model_label_name"] = "Dead"
 
 labels["model_label_id"] = labels["model_label_name"].apply(lambda n: labels_list.index(n))
@@ -268,6 +268,11 @@ labels["model_label_name"] = labels["model_label_name"].apply(lambda n: n.replac
 
 labels = labels[["data_label_id", "data_label_name", "model_label_id", "model_label_name"]]
 labels = labels.sort_values(["model_label_id", "data_label_id"])
+
+print(f"{len(labels["model_label_name"].unique())} unique labels:")
+
+for l in labels["model_label_name"].unique():
+    print(f"- {l}")
 
 # %%
 

@@ -6,7 +6,7 @@ import torch
 import torchvision.transforms.v2 as tv_transforms
 import json
 
-from scripts.loss import FocalTverskyLoss
+from scripts.train.loss import TverskyLoss, calc_class_weights
 from scripts.train.train import run_loop
 from scripts.models.unet import UNet
 from scripts.dataset import DatasetTreeAI
@@ -30,28 +30,24 @@ dataset_all = DatasetTreeAI(
     x_transform=tv_transforms.Compose([
         tv_transforms.Normalize(dataset_stats["x_mean"], dataset_stats["x_std"]),
     ]),
-    y_transform=tv_transforms.Compose([tv_transforms.Lambda(
-        lambda y: torch.nn.functional \
-            .one_hot(y.long(), num_classes=len(dataset_all.label_id_to_name)) \
-            .permute(2, 0, 1) \
-            .float()
-    )])
 )
 
 dataset_train, dataset_valid = dataset_all.split(0.2, random_state=42)
 
-batch_size = 3
+batch_size = 6
 dataloader_train = dataset_train.loader(batch_size)
 dataloader_valid = dataset_valid.loader(batch_size)
 
 # %%
 
-base_lr = 2.5e-4
+device = torch.device("cuda")
+
+base_lr = 5e-4
 num_epochs = 100
 
-device = torch.device("cuda")
-model = UNet(len(dataset_stats["y_counts"]), norm="group").to(device)
-loss_fn = FocalTverskyLoss(alpha=0.3, beta=0.7, gamma=1.33).to(device)
+model = UNet(len(dataset_stats["y_counts"]), norm="instance").to(device)
+weights = calc_class_weights(torch.Tensor(list(dataset_stats["y_counts"].values()))).to(device)
+loss_fn = TverskyLoss(alpha=0.3, beta=0.7, class_weights=weights).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=base_lr)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=base_lr * 0.01)
 

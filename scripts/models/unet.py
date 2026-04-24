@@ -1,6 +1,9 @@
 # %%
 
 import torch
+from typing import Literal
+from pathlib import Path
+import json
 
 
 # %%
@@ -10,29 +13,28 @@ class ConvReLU(torch.nn.Module):
             self,
             in_ch: int, out_ch: int,
             kernel_size: int = 3, stride: int = 1, padding: int = 1, dilation: int = 1,
-            norm="none"
+            norm: Literal["none", "instance", "group"] = "none"
     ):
         super().__init__()
 
-        if norm == "none":
-            self.seq = torch.nn.Sequential(
-                torch.nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, dilation),
-                torch.nn.ReLU(inplace=True),
-            )
-        elif norm == "group":
-            self.seq = torch.nn.Sequential(
-                torch.nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, dilation),
-                torch.nn.GroupNorm(self.get_num_groups(in_ch), out_ch),
-                torch.nn.ReLU(inplace=True),
-            )
-        # elif norm == "batch":
-        #     self.seq = torch.nn.Sequential(
-        #         torch.nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, dilation),
-        #         torch.nn.BatchNorm2d(out_ch),
-        #         torch.nn.ReLU(),
-        #     )
-        else:
-            raise NotImplementedError("norm must be \"none\", \"group\", or \"batch\"")
+        match norm:
+            case "none":
+                self.seq = torch.nn.Sequential(
+                    torch.nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, dilation),
+                    torch.nn.ReLU(inplace=True),
+                )
+            case "instance":
+                self.seq = torch.nn.Sequential(
+                    torch.nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, dilation),
+                    torch.nn.InstanceNorm2d(out_ch, affine=True),
+                    torch.nn.ReLU(inplace=True),
+                )
+            case "group":
+                self.seq = torch.nn.Sequential(
+                    torch.nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, dilation),
+                    torch.nn.GroupNorm(self.get_num_groups(in_ch), out_ch),
+                    torch.nn.ReLU(inplace=True),
+                )
 
     def forward(self, x):
         return self.seq(x)
@@ -44,12 +46,18 @@ class ConvReLU(torch.nn.Module):
 
         return 1
 
-        # %%
-
 
 class UNet(torch.nn.Module):
-    def __init__(self, n_classes, apply_softmax: bool = False, norm: str = "none"):
+    def __init__(
+            self,
+            n_classes,
+            apply_softmax: bool = False,
+            norm: Literal["none", "instance", "group"] = "none",
+            **kwargs
+    ):
         super().__init__()
+
+        self._config = {"n_classes": n_classes, "apply_softmax": apply_softmax, "norm": norm}
 
         # in -> 1024x1024x3
         self.conv11 = ConvReLU(3, 64, norm=norm)  # -> 1024x1024x64
@@ -133,6 +141,31 @@ class UNet(torch.nn.Module):
 
         return torch.nn.functional.softmax(x101, dim=1) if self.apply_softmax else x101
 
+    @staticmethod
+    def load(config_path: str | Path, weights_path: str | Path) -> "UNet":
+        config_path = Path(config_path)
+        weights_path = Path(weights_path)
+
+        config = json.loads(config_path.read_text())
+        weights = torch.load(weights_path, weights_only=True)
+
+        assert config["name"] == "UNet"
+
+        unet = UNet(**config)
+        unet.load_state_dict(weights)
+
+        return unet
+
+    def save(self, config_path: str | Path, weights_path: str | Path):
+        config_path = Path(config_path)
+        weights_path = Path(weights_path)
+
+        config = json.dumps({**self._config, "name": "UNet"}, indent=2)
+        weights = self.state_dict()
+
+        config_path.write_text(config)
+        torch.save(weights, weights_path)
+
     def get_encoder_modules(self) -> list[torch.nn.Module]:
         return [
             self.conv11, self.conv12,
@@ -159,16 +192,15 @@ if __name__ == "__main__":
     dataset = DatasetTreeAI("ID", "train", 0)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
 
-    for norm in ["none", "group"]:
-        model = UNet(len(dataset.label_id_to_name), norm=norm)
-        model.eval()
+    model = UNet(len(dataset.label_id_to_name), norm="none")
+    model.eval()
 
-        torch.onnx.export(
-            model,
-            (next(iter(dataloader))[0],),
-            f"models/untrained_onnx/unet_{norm}.onnx",
-            input_names=["input"],
-            output_names=["output"],
-            external_data=False,
-            dynamo=True,
-        )
+    torch.onnx.export(
+        model,
+        (next(iter(dataloader))[0],),
+        f"models/untrained_onnx/unet.onnx",
+        input_names=["input"],
+        output_names=["output"],
+        external_data=False,
+        dynamo=True,
+    )

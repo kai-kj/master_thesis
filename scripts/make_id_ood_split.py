@@ -41,7 +41,7 @@ sites_ext = treeai.get_sites() \
 
 # %%
 
-other_frac_cutoff = 0.4
+other_frac_cutoff = 0.5
 
 by_site = pd.crosstab(trees_relabeled["site_id"], trees_relabeled["label_name"])
 by_site["other_frac"] = by_site["other"] / by_site.sum(axis=1)
@@ -71,12 +71,12 @@ id_countries = [
     # "Finland",
     "Germany",
     # "Iran",
-    # "Italy",
+    "Italy",
     # "Japan",
     "Lithuania",
     # "Mexico",
     # "Portugal",
-    "Russia",
+    # "Russia",
     # "Slovakia",
     # "Spain",
     # "Switzerland",

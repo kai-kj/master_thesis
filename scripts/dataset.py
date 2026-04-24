@@ -166,6 +166,8 @@ if __name__ == "__main__":
 # %%
 
 if __name__ == "__main__":
+    dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
+
     dataset = DatasetTreeAI(
         "ID", "train", 0,
         xy_transform=tv_transforms.Compose([
@@ -173,7 +175,7 @@ if __name__ == "__main__":
             tv_transforms.RandomVerticalFlip(),
             tv_transforms.RandomRotation([0, 90]),
         ]),
-        x_transform=tv_transforms.Normalize([0.24, 0.38, 0.29], [0.19, 0.27, 0.24]),  # from dataset_stats.json
+        x_transform=tv_transforms.Normalize(dataset_stats["x_mean"], dataset_stats["x_std"]),  # from dataset_stats.json
     )
 
     n_samples = 5
@@ -200,32 +202,3 @@ if __name__ == "__main__":
 
     fig.tight_layout()
     fig.show()
-
-    # %%
-    #
-    # if __name__ == "__main__":
-    #     dataset = DatasetTreeAI(
-    #         "ID", "train", 0,
-    #         xy_transform=tv_transforms.Compose([
-    #             tv_transforms.RandomHorizontalFlip(),
-    #             tv_transforms.RandomVerticalFlip(),
-    #             tv_transforms.RandomRotation([0, 90]),
-    #         ]),
-    #         x_transform=tv_transforms.Normalize([0.24, 0.38, 0.29], [0.19, 0.27, 0.24]),  # from dataset_stats.json
-    #         y_transform=tv_transforms.Compose([
-    #             tv_transforms.Lambda(
-    #                 lambda y: torch.nn.functional \
-    #                     .one_hot(y.long(), num_classes=18) \
-    #                     .permute(2, 0, 1).float()
-    #             )
-    #         ]),
-    #     )
-
-    x, y = dataset[0]
-
-    print(x.shape)
-    print(y.shape)
-
-    yy = y.argmax(dim=0)
-
-    print(yy.shape)
