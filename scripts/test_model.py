@@ -14,12 +14,12 @@ import random
 import json
 
 from scripts.models.unet import UNet
-from scripts.dataset import DatasetTreeAI
+from scripts.dataset import DatasetTreeAI, make_base_test_augmentations
 from scripts.util.seed import seed
 
 # %%
 
-model_path = Path("models/20260424_173050")
+model_path = Path("models/20260427_192444")
 assert model_path.is_dir()
 
 dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
@@ -31,11 +31,11 @@ seed(42)
 
 # %%
 
-x_transform = tv_transforms.Compose([
-    tv_transforms.Normalize(dataset_stats["x_mean"], dataset_stats["x_std"]),
-])
+dataset_test = DatasetTreeAI(
+    "ID", "test", 0,
+    augmentations=make_base_test_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
+)
 
-dataset_test = DatasetTreeAI("ID", "test", 0, x_transform=x_transform)
 dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size, shuffle=True)
 
 # %%
@@ -51,17 +51,14 @@ fig, ax = plt.subplots(3, n_samples, figsize=(n_samples * 4, 3 * 4))
 indices = [327, 57, 44, 287, 52]
 
 for i in range(n_samples):
-    # index = random.randint(0, len(dataset_test) - 1)
     index = indices[i]
 
     x, y_true = dataset_test[index]
-    x_raw, _ = dataset_test.get_raw(index)
 
     y_pred = model(x.to(device).unsqueeze(0)).squeeze(0).cpu().detach().numpy()
     y_pred = y_pred.transpose(1, 2, 0).argmax(2)[:, :, np.newaxis]
 
     x = x.numpy().transpose(1, 2, 0)
-    x_raw = x_raw.numpy().transpose(1, 2, 0)
     y_true = y_true.numpy()
 
     ax[0, i].imshow((x - x.min()) / (x.max() - x.min()))

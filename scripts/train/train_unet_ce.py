@@ -3,13 +3,12 @@
 from pathlib import Path
 import time
 import torch
-import torchvision.transforms.v2 as tv_transforms
 import json
 
 from scripts.train.loss import calc_class_weights
 from scripts.train.train import run_loop
 from scripts.models.unet import UNet
-from scripts.dataset import DatasetTreeAI
+from scripts.dataset import DatasetTreeAI, make_base_train_augmentations, make_base_test_augmentations
 
 # %%
 
@@ -20,19 +19,12 @@ dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
 
 # %%
 
-dataset_all = DatasetTreeAI(
-    "ID", "train", 0,
-    xy_transform=tv_transforms.Compose([
-        tv_transforms.RandomHorizontalFlip(),
-        tv_transforms.RandomVerticalFlip(),
-        tv_transforms.RandomRotation([0, 90]),
-    ]),
-    x_transform=tv_transforms.Compose([
-        tv_transforms.Normalize(dataset_stats["x_mean"], dataset_stats["x_std"]),
-    ]),
+dataset_train, dataset_valid = DatasetTreeAI("ID", "train", 0).split(
+    0.2,
+    train_augmentations=make_base_train_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
+    test_augmentations=make_base_test_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
+    random_state=42,
 )
-
-dataset_train, dataset_valid = dataset_all.split(0.2, random_state=42)
 
 batch_size = 6
 dataloader_train = dataset_train.loader(batch_size)
@@ -43,7 +35,7 @@ dataloader_valid = dataset_valid.loader(batch_size)
 device = torch.device("cuda")
 
 base_lr = 1e-3
-num_epochs = 100
+num_epochs = 150
 
 model = UNet(len(dataset_stats["y_counts"]), norm="instance").to(device)
 weights = calc_class_weights(torch.Tensor(list(dataset_stats["y_counts"].values()))).to(device)

@@ -7,7 +7,7 @@ import pandas as pd
 
 # %%
 
-model_path = Path("models/20260424_173050")
+model_path = Path("models/20260427_192444")
 assert model_path.is_dir()
 
 # %%

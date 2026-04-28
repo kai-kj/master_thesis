@@ -4,15 +4,14 @@ import random
 from pathlib import Path
 import json
 
+import albumentations as A
 import sklearn
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
-from torchvision import tv_tensors
-import torchvision.io as tv_io
-import torchvision.transforms.v2 as tv_transforms
 import numpy as np
 import geopandas as gpd
+import cv2
 
 from dependencies.treeai_segmentation.treeai_segmentation import TreeAISegmentation
 
@@ -28,9 +27,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
             self,
             id_or_ood: str, train_or_test: str, split_n: int,
             indices: None | list[int] = None,
-            xy_transform: None | tv_transforms.Transform = None,
-            x_transform: None | tv_transforms.Transform = None,
-            y_transform: None | tv_transforms.Transform = None,
+            augmentations: A.Compose | None = None,
     ):
         super(DatasetTreeAI, self).__init__()
 
@@ -41,10 +38,8 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         assert train_or_test in ["train", "test"]
         assert split_n in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-        self._config = {  # for when calling .split()
-            "id_or_ood": id_or_ood, "train_or_test": train_or_test, "split_n": split_n,
-            "xy_transform": xy_transform, "x_transform": x_transform, "y_transform": y_transform,
-        }
+        # for when calling .split()
+        self._config = {"id_or_ood": id_or_ood, "train_or_test": train_or_test, "split_n": split_n}
 
         self._treeai = TreeAISegmentation(self.TREEAI_SEGMENTATION_PATH)
 
@@ -55,14 +50,12 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         self._patches = self._patches[self._patches["dist"] == id_or_ood]
         self._patches = self._patches[self._patches[f"split_{split_n}"] == train_or_test]
 
-        self._patches = self._patches[["crop_x0", "crop_x1", "crop_y0", "crop_y1", "path_x", "path_y"]]
+        self._patches = self._patches[["site_id", "crop_x0", "crop_x1", "crop_y0", "crop_y1", "path_x", "path_y"]]
 
         if indices is not None:
             self._patches = self._patches.iloc[indices]
 
-        self._xy_transform = xy_transform
-        self._x_transform = x_transform
-        self._y_transform = y_transform
+        self._augmentations = augmentations
 
         labels_map = pd.read_csv(self.LABELS_MAP_PATH)
 
@@ -78,20 +71,42 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         return len(self._patches)
 
     def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
-        x_tensor, y_tensor = self.get_raw(idx)
+        row = self._patches.iloc[idx]
 
-        if self._x_transform is not None: x_tensor = self._x_transform(x_tensor)
-        if self._y_transform is not None: y_tensor = self._y_transform(y_tensor)
+        x_array: np.ndarray = cv2.cvtColor(cv2.imread(row["path_x"]), cv2.COLOR_BGR2RGB)  # type: ignore
+        y_array: np.ndarray = cv2.imread(row["path_y"], cv2.IMREAD_GRAYSCALE)  # type: ignore
 
-        return x_tensor, y_tensor  # type: ignore
+        x_array = x_array[row["crop_y0"]:row["crop_y1"], row["crop_x0"]:row["crop_x1"], :]
+        y_array = y_array[row["crop_y0"]:row["crop_y1"], row["crop_x0"]:row["crop_x1"]]
 
-    def split(self, test_size: float, random_state: int | None = None) -> tuple["DatasetTreeAI", "DatasetTreeAI"]:
+        x_array = x_array.astype(np.float32) / 255.0
+
+        if self._augmentations is not None:
+            augmented = self._augmentations(image=x_array, mask=y_array)
+            x_array = augmented["image"]
+            y_array = augmented["mask"]
+
+        x_tensor = torch.Tensor(x_array).permute(2, 0, 1)
+        y_tensor = self._labels_lut[torch.Tensor(y_array).long()]
+
+        return x_tensor, y_tensor
+
+    def split(
+            self,
+            test_size: float,
+            train_augmentations: A.Compose | None = None,
+            test_augmentations: A.Compose | None = None,
+            random_state: int | None = None
+    ) -> tuple["DatasetTreeAI", "DatasetTreeAI"]:
         train_idx, test_idx = sklearn.model_selection.train_test_split(
             range(len(self)), test_size=test_size, random_state=random_state
         )
 
         train_dataset = DatasetTreeAI(indices=train_idx, **self._config)
+        if train_augmentations is not None: train_dataset._augmentations = train_augmentations
+
         test_dataset = DatasetTreeAI(indices=test_idx, **self._config)
+        if test_augmentations is not None: test_dataset._augmentations = test_augmentations
 
         return train_dataset, test_dataset
 
@@ -106,39 +121,59 @@ class DatasetTreeAI(torch.utils.data.Dataset):
             pin_memory=True, num_workers=num_workers, prefetch_factor=prefetch_factor, persistent_workers=True
         )
 
-    def get_raw(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
-        row = self._patches.iloc[idx]
-
-        xy_tensor = torch.cat([tv_io.read_image(row["path_x"]), tv_io.read_image(row["path_y"])], 0)  # type: ignore
-        xy_tensor = xy_tensor[:, row["crop_y0"]:row["crop_y1"], row["crop_x0"]:row["crop_x1"]]  # type: ignore
-
-        if self._xy_transform is not None: xy_tensor = self._xy_transform(xy_tensor)
-
-        x_tensor = tv_tensors.Image(xy_tensor[0:3, :, :].to(torch.float32) / 255.0)
-        y_tensor = self._labels_lut[tv_tensors.Image(xy_tensor[3, :, :].long())].squeeze(0)
-
-        return x_tensor, y_tensor  # type: ignore
-
     def calc_stats(self) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
         n_pixels = 0
         x_sum = np.zeros(3)
         x_sq_sum = np.zeros(3)
-        y_counts = np.zeros(len(dataset.label_id_to_name), dtype=np.int64)
+        y_counts = np.zeros(len(self.label_id_to_name), dtype=np.int64)
 
-        for i in range(len(dataset)):
-            x, y = dataset[i]
+        for i in range(len(self)):
+            x, y = self[i]
             x, y = x.numpy(), y.numpy()
 
             n_pixels += x.shape[1] * x.shape[2]
             x_sum += x.sum(axis=(1, 2))
             x_sq_sum += (x ** 2).sum(axis=(1, 2))
-            y_counts += np.bincount(y.ravel(), minlength=len(dataset.label_id_to_name))
+            y_counts += np.bincount(y.ravel(), minlength=len(self.label_id_to_name))
 
         x_mean = x_sum / n_pixels
         x_std = np.sqrt(x_sq_sum / n_pixels - (x_sum / n_pixels) ** 2)
-        label_counts = {dataset.label_id_to_name[i]: int(y_counts[i]) for i in range(len(y_counts))}
+        label_counts = {self.label_id_to_name[i]: int(y_counts[i]) for i in range(len(y_counts))}
 
         return x_mean, x_std, label_counts  # type: ignore
+
+
+def make_base_train_augmentations(
+        x_mean: tuple[float, float, float],
+        x_std: tuple[float, float, float]
+) -> A.Compose:
+    return A.Compose([
+        # Geometric
+        A.HorizontalFlip(p=0.5),
+        A.VerticalFlip(p=0.5),
+        A.Rotate(limit=(-90.0, 90.0), p=1.0),
+
+        # Sensor
+        # A.RandomBrightnessContrast(brightness_limit=(-0.05, 0.05), contrast_limit=(-0.05, 0.05), p=0.5),
+        # A.HueSaturationValue(hue_shift_limit=(-5, 5), sat_shift_limit=(-5, 5), val_shift_limit=(-5, 5), p=0.5),
+        # A.GaussianBlur(blur_limit=(3, 3), p=0.125),
+
+        A.RandomBrightnessContrast(brightness_limit=(-0.1, 0.1), contrast_limit=(-0.1, 0.1), p=0.5),
+        A.HueSaturationValue(hue_shift_limit=(-10, 10), sat_shift_limit=(-10, 10), val_shift_limit=(-10, 10), p=0.5),
+        A.GaussianBlur(blur_limit=(3, 3), p=0.125),
+
+        # Norm
+        A.Normalize(mean=x_mean, std=x_std, max_pixel_value=1.0, p=1.0),
+    ])
+
+
+def make_base_test_augmentations(
+        x_mean: tuple[float, float, float],
+        x_std: tuple[float, float, float]
+) -> A.Compose:
+    return A.Compose([
+        A.Normalize(mean=x_mean, std=x_std, max_pixel_value=1.0, p=1.0),
+    ])
 
 
 # %%
@@ -150,7 +185,7 @@ if __name__ == "__main__":
     fig, ax = plt.subplots()
     ax.bar(range(len(dataset_stats[2])), list(dataset_stats[2].values()))
     ax.set_xticks(range(len(dataset_stats[2])), labels=dataset_stats[2].keys(), rotation=90)
-    ax.set_ylabel("class occurences")
+    ax.set_ylabel("class occurrences")
     ax.spines[["right", "top"]].set_visible(False)
     fig.tight_layout()
     fig.show()
@@ -168,37 +203,45 @@ if __name__ == "__main__":
 if __name__ == "__main__":
     dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
 
-    dataset = DatasetTreeAI(
-        "ID", "train", 0,
-        xy_transform=tv_transforms.Compose([
-            tv_transforms.RandomHorizontalFlip(),
-            tv_transforms.RandomVerticalFlip(),
-            tv_transforms.RandomRotation([0, 90]),
-        ]),
-        x_transform=tv_transforms.Normalize(dataset_stats["x_mean"], dataset_stats["x_std"]),  # from dataset_stats.json
+    dataset_train, dataset_test = DatasetTreeAI("ID", "train", 0).split(
+        0.2,
+        train_augmentations=make_base_train_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
+        test_augmentations=make_base_test_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
+        random_state=42,
     )
 
     n_samples = 5
-    fig, ax = plt.subplots(2, n_samples, figsize=(n_samples * 4, 8))
+    fig, ax = plt.subplots(4, n_samples, figsize=(n_samples * 4, 4 * 4))
 
     for i in range(n_samples):
-        index = random.randint(0, len(dataset) - 1)
-        x, y = dataset[index]
+        index_train = random.randint(0, len(dataset_train) - 1)
+        index_test = random.randint(0, len(dataset_test) - 1)
 
-        x = x.numpy().transpose(1, 2, 0)
-        y = y.numpy()
+        x_train, y_train = dataset_train[index_train]
+        x_test, y_test = dataset_test[index_test]
 
-        ax[0, i].imshow((x - x.min()) / (x.max() - x.min()))
+        x_train = x_train.numpy().transpose(1, 2, 0)
+        y_train = y_train.numpy()
+
+        x_test = x_test.numpy().transpose(1, 2, 0)
+        y_test = y_test.numpy()
+
+        ax[0, i].set_title(f"train sample {index_train}")
+        ax[0, i].imshow((x_train - x_train.min()) / (x_train.max() - x_train.min()))
         ax[0, i].axis("off")
 
-        vmin = min(dataset.label_id_to_name.keys())
+        ax[2, i].set_title(f"test sample {index_test}")
+        ax[2, i].imshow((x_test - x_test.min()) / (x_test.max() - x_test.min()))
+        ax[2, i].axis("off")
 
-        ax[1, i].imshow(
-            y,
-            vmin=min(dataset.label_id_to_name.keys()), vmax=max(dataset.label_id_to_name.keys()),
-            cmap="viridis"
-        )
+        vmin = min(dataset_train.label_id_to_name.keys())
+        vmax = max(dataset_train.label_id_to_name.keys())
+
+        ax[1, i].imshow(y_train, vmin=vmin, vmax=vmax, cmap="viridis")
         ax[1, i].axis("off")
+
+        ax[3, i].imshow(y_test, vmin=vmin, vmax=vmax, cmap="viridis")
+        ax[3, i].axis("off")
 
     fig.tight_layout()
     fig.show()

@@ -1,6 +1,9 @@
 import torch
 from typing import Literal
 
+import pytorch_optimizer.loss.tversky
+import pytorch_optimizer.loss.focal
+
 
 class TverskyLoss(torch.nn.Module):
     def __init__(
@@ -31,15 +34,13 @@ class TverskyLoss(torch.nn.Module):
         if self.class_weights is not None:
             tv = tv * self.class_weights
 
-        loss = 1.0 - tv
-
         match self.reduction:
             case "mean":
-                return loss.mean()
+                return (1.0 - tv).mean()
             case "sum":
-                return loss.sum()
+                return (1.0 - tv).sum()
             case "none":
-                return loss
+                return 1.0 - tv
 
 
 class FocalTverskyLoss(torch.nn.Module):
@@ -50,7 +51,7 @@ class FocalTverskyLoss(torch.nn.Module):
 
     def forward(self, logits, target):
         return torch.pow(self.tversky(logits, target), self.gamma).mean()
-
+    
 
 def calc_class_weights(class_counts: torch.Tensor, log_smooth: bool = True) -> torch.Tensor:
     class_freq = class_counts / (class_counts.sum() + 1)  # avoid 0 division

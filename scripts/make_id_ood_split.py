@@ -18,6 +18,9 @@ assert labels_map_path.is_file()
 countries_path = Path("/home/kai/Thesis/data/naturalearth/ne_10m_admin_0_countries.zip")
 assert countries_path.is_file()
 
+provinces_path = Path("/home/kai/Thesis/data/naturalearth/ne_10m_admin_1_states_provinces.zip")
+assert provinces_path.is_file()
+
 sites_split_path = Path("data/sites_split.gpkg")
 
 treeai = TreeAISegmentation("/home/kai/Thesis/data/treeai_segmentation/", pre_cache=True)
@@ -26,6 +29,7 @@ treeai = TreeAISegmentation("/home/kai/Thesis/data/treeai_segmentation/", pre_ca
 
 labels_map = pd.read_csv(labels_map_path)
 countries = gpd.read_file(countries_path)
+provinces = gpd.read_file(provinces_path)
 
 trees_relabeled = treeai.get_trees_ext() \
     .merge(labels_map, left_on="label_id", right_on="data_label_id", how="left") \
@@ -37,7 +41,10 @@ sites_ext = treeai.get_sites() \
     .sjoin(countries[["NAME", "geometry"]], how="left", predicate="intersects") \
     .drop(columns=["index_right"]) \
     .rename(columns={"NAME": "country"}) \
-    [["site_id", "country", "geometry"]]
+    .sjoin(provinces[["name", "geometry"]], how="left", predicate="intersects") \
+    .drop(columns=["index_right"]) \
+    .rename(columns={"name": "province"}) \
+    [["site_id", "country", "province", "geometry"]]
 
 # %%
 
@@ -64,81 +71,19 @@ by_site = by_site[by_site["other_frac"] < other_frac_cutoff].drop(columns=["othe
 
 # %%
 
-id_countries = [
-    "Canada",
-    # "China",
-    # "Czechia",
-    # "Finland",
-    "Germany",
-    # "Iran",
-    "Italy",
-    # "Japan",
-    "Lithuania",
-    # "Mexico",
-    # "Portugal",
-    # "Russia",
-    # "Slovakia",
-    # "Spain",
-    # "Switzerland",
-    # "Turkey",
+id_country_province = [
+    ("Canada", "Québec"),
+    ("Germany", "Baden-Württemberg"),
+    # ("Spain", "Granada"),
 ]
-
-ood_countries = list(set(sites_ext["country"].unique()) - set(id_countries))
-
-by_country = by_site \
-    .reset_index() \
-    .merge(sites_ext[["site_id", "country"]], on="site_id", how="left") \
-    .drop(columns=["site_id"]) \
-    .groupby("country") \
-    .agg("sum") \
-    .reset_index()
-
-by_country["id"] = by_country["country"].apply(lambda c: c not in id_countries)
-by_country = by_country.sort_values("id").drop(columns=["id"])
-
-by_country_norm = pd.DataFrame(by_country.iloc[:, 1:] / by_country.iloc[:, 1:].sum(axis=0))
-by_country_norm.insert(0, "country", by_country["country"])
-
-fig, ax = plt.subplots(1, 2, figsize=(16, 8))
-
-ax[0].set_prop_cycle(cycler(color=[get_hex(c) for c in get_colors(by_country.shape[0], pastel_factor=0.5, rng=0)]))
-ax[1].set_prop_cycle(cycler(color=[get_hex(c) for c in get_colors(by_country.shape[0], pastel_factor=0.5, rng=0)]))
-
-xs = np.arange(by_country.shape[1] - 1)
-
-bottom_0 = np.zeros_like(xs, dtype=np.float64)
-bottom_1 = np.zeros_like(xs, dtype=np.int64)
-
-for _, row in by_country_norm.iterrows():
-    row = row.tolist()
-    ax[0].bar(xs, row[1:], bottom=bottom_0, hatch="xx" if row[0] in id_countries else None, label=row[0])
-    bottom_0 += row[1:]
-
-for _, row in by_country.iterrows():
-    row = row.tolist()
-    ax[1].bar(xs, row[1:], bottom=bottom_1, hatch="xx" if row[0] in id_countries else None, label=row[0])
-    bottom_1 += row[1:]
-
-ax[0].set_xticks(xs, labels=by_country.columns[1:], rotation=90)
-ax[0].spines[["right", "top"]].set_visible(False)
-ax[0].set_ylabel("normlized count")
-
-ax[1].set_xticks(xs, labels=by_country.columns[1:], rotation=90)
-ax[1].spines[["right", "top"]].set_visible(False)
-ax[1].set_ylabel("count")
-ax[1].legend(loc="upper right")
-
-fig.tight_layout()
-fig.savefig("figures/id_ood_split.png")
-fig.show()
-
-# %%
 
 sites_split = sites_ext.copy()
 
-sites_split["dist"] = "none"
-sites_split.loc[sites_split["country"].isin(id_countries), "dist"] = "ID"
-sites_split.loc[sites_split["country"].isin(ood_countries), "dist"] = "OOD"
+country_mask = sites_split.apply(lambda v: v["country"] in [r[0] for r in id_country_province], axis=1)
+province_mask = sites_split.apply(lambda v: v["province"] in [r[1] for r in id_country_province], axis=1)
+
+sites_split["dist"] = "OOD"
+sites_split.loc[country_mask & province_mask, "dist"] = "ID"
 
 print("ID countries:")
 
@@ -150,7 +95,62 @@ print("OOD countries:")
 for c in sites_split[sites_split["dist"] == "OOD"]["country"].unique():
     print(f"- {c}")
 
-sites_split = sites_split[["site_id", "dist", "country", "geometry"]]
+sites_split = sites_split[["site_id", "dist", "country", "province", "geometry"]]
+
+# %%
+
+by_country = by_site \
+    .reset_index() \
+    .merge(sites_split[["site_id", "country", "province"]], on="site_id", how="left") \
+    .drop(columns=["site_id"]) \
+    .groupby(["country", "province"]) \
+    .agg("sum") \
+    .reset_index()
+
+country_mask = by_country.apply(lambda v: v["country"] in [r[0] for r in id_country_province], axis=1)
+province_mask = by_country.apply(lambda v: v["province"] in [r[1] for r in id_country_province], axis=1)
+
+by_country["id"] = ~(country_mask & province_mask)
+by_country = by_country.sort_values("id").drop(columns=["id"])
+
+by_country_norm = pd.DataFrame(by_country.iloc[:, 2:] / by_country.iloc[:, 2:].sum(axis=0))
+by_country_norm.insert(0, "country", by_country["country"])
+by_country_norm.insert(1, "province", by_country["province"])
+
+fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+
+ax[0].set_prop_cycle(cycler(color=[get_hex(c) for c in get_colors(by_country.shape[0], pastel_factor=0.5, rng=0)]))
+ax[1].set_prop_cycle(cycler(color=[get_hex(c) for c in get_colors(by_country.shape[0], pastel_factor=0.5, rng=0)]))
+
+xs = np.arange(by_country.shape[1] - 2)
+
+bottom_0 = np.zeros_like(xs, dtype=np.float64)
+bottom_1 = np.zeros_like(xs, dtype=np.int64)
+
+for _, row in by_country_norm.iterrows():
+    row = row.tolist()
+    is_id = row[0] in [r[0] for r in id_country_province] and row[1] in [r[1] for r in id_country_province]
+    ax[0].bar(xs, row[2:], bottom=bottom_0, hatch="xx" if is_id else None, label=f"{row[0]}, {row[1]}")
+    bottom_0 += row[2:]
+
+for _, row in by_country.iterrows():
+    row = row.tolist()
+    is_id = row[0] in [r[0] for r in id_country_province] and row[1] in [r[1] for r in id_country_province]
+    ax[1].bar(xs, row[2:], bottom=bottom_1, hatch="xx" if is_id else None, label=f"{row[0]}, {row[1]}")
+    bottom_1 += row[2:]
+
+ax[0].set_xticks(xs, labels=by_country.columns[2:], rotation=90)
+ax[0].spines[["right", "top"]].set_visible(False)
+ax[0].set_ylabel("normalized count")
+
+ax[1].set_xticks(xs, labels=by_country.columns[2:], rotation=90)
+ax[1].spines[["right", "top"]].set_visible(False)
+ax[1].set_ylabel("count")
+ax[1].legend(loc="upper right", fontsize="small", frameon=False)
+
+fig.tight_layout()
+fig.savefig("figures/id_ood_split.png")
+fig.show()
 
 # %%
 
