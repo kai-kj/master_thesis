@@ -243,13 +243,14 @@ labels_list = [
     "Pinus",
     "Populus",
     # "Pseudotsuga", # < 1000
-    "Quercus",
+    # "Quercus", # < 1000
     "Thuja",
     # "Tilia",  # < 1000
     # "Tsuga",  # < 1000
 ]
 
-labels_list = ["Background", "Other", "Dead"] + labels_list
+# labels_list = ["Background", "Other", "Dead"] + labels_list
+labels_list = ["Background", "Other"] + labels_list
 
 labels = treeai \
     .get_labels() \
@@ -261,7 +262,7 @@ labels["model_label_name"] = labels["genus_name"].apply(lambda n: n if n in labe
 
 labels.loc[labels["data_label_name"] == "Fully labeled background", "model_label_name"] = "Background"
 labels.loc[labels["data_label_name"] == "Partially labeled background", "model_label_name"] = "Background"
-labels.loc[labels["data_label_name"] == "Dead tree", "model_label_name"] = "Dead"
+# labels.loc[labels["data_label_name"] == "Dead tree", "model_label_name"] = "Dead"
 
 labels["model_label_id"] = labels["model_label_name"].apply(lambda n: labels_list.index(n))
 labels["model_label_name"] = labels["model_label_name"].apply(lambda n: n.replace(" ", "_").lower())

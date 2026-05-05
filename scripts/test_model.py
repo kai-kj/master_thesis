@@ -8,9 +8,6 @@ import sklearn.metrics as skm
 import seaborn as sns
 from tqdm import tqdm
 import pandas as pd
-import torchvision.transforms.v2 as tv_transforms
-import sklearn
-import random
 import json
 
 from scripts.models.unet import UNet
@@ -19,8 +16,11 @@ from scripts.util.seed import seed
 
 # %%
 
-model_path = Path("models/20260427_192444")
+model_path = Path("models/unet_ftv_20260505_023132")
 assert model_path.is_dir()
+
+dist_name = "ID"
+# dist_name = "iran"
 
 dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
 
@@ -32,7 +32,7 @@ seed(42)
 # %%
 
 dataset_test = DatasetTreeAI(
-    "ID", "test", 0,
+    "ID" if dist_name == "ID" else f"OOD_{dist_name}", "test", 0,
     augmentations=make_base_test_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
 )
 
@@ -48,10 +48,11 @@ model.eval()
 n_samples = 5
 fig, ax = plt.subplots(3, n_samples, figsize=(n_samples * 4, 3 * 4))
 
-indices = [327, 57, 44, 287, 52]
+indices = [47, 71, 111, 216, 346] if dist_name == "ID" else np.arange(0, len(dataset_test), len(dataset_test) // 5)
 
 for i in range(n_samples):
     index = indices[i]
+    # index = random.randint(0, len(dataset_test))
 
     x, y_true = dataset_test[index]
 
@@ -67,14 +68,14 @@ for i in range(n_samples):
 
     ax[1, i].imshow(
         y_true,
-        vmin=min(dataset_test.label_id_to_name.keys()), vmax=max(dataset_test.label_id_to_name.keys()),
+        vmin=-1, vmax=max(dataset_test.label_id_to_name.keys()),
         cmap="Accent"
     )
     ax[1, i].axis("off")
 
     ax[2, i].imshow(
         y_pred,
-        vmin=min(dataset_test.label_id_to_name.keys()), vmax=max(dataset_test.label_id_to_name.keys()),
+        vmin=-1, vmax=max(dataset_test.label_id_to_name.keys()),
         cmap="Accent"
     )
     ax[2, i].axis("off")
@@ -90,7 +91,6 @@ ys_pred = []
 
 for batch in tqdm(dataloader_test, total=len(dataloader_test)):
     y_pred = model(batch[0].to(device)).cpu().detach().numpy()
-
     ys_true.append(batch[1].numpy().flatten())
     ys_pred.append(np.argmax(y_pred, axis=1).flatten())
 
@@ -125,12 +125,11 @@ metrics = []
 
 for metric in ["micro", "macro", "weighted"]:
     print(f"computing {metric} metrics")
-
-    p = skm.precision_score(ys_true.flatten(), ys_pred.flatten(), average=metric, zero_division=0.0)  # type: ignore
-    r = skm.recall_score(ys_true.flatten(), ys_pred.flatten(), average=metric, zero_division=0.0)  # type: ignore
-    f1 = skm.f1_score(ys_true.flatten(), ys_pred.flatten(), average=metric, zero_division=0.0)  # type: ignore
+    p, r, f1, _ = skm.precision_recall_fscore_support(
+        ys_true.flatten(), ys_pred.flatten(),
+        average=metric, zero_division=0.0  # type: ignore
+    )
     iou = skm.jaccard_score(ys_true.flatten(), ys_pred.flatten(), average=metric, zero_division=0.0)  # type: ignore
-
     metrics.append([metric, p, r, f1, iou])
 
 metrics = pd.DataFrame(metrics, columns=["metric", "precision", "recall", "f1", "iou"])

@@ -5,21 +5,23 @@ import time
 import torch
 import json
 
-from scripts.train.loss import TverskyLoss, calc_class_weights
+from scripts.train.loss import FocalTverskyLoss, calc_class_weights
 from scripts.train.train import run_loop
 from scripts.models.unet import UNet
 from scripts.dataset import DatasetTreeAI, make_base_train_augmentations, make_base_test_augmentations
 
 # %%
 
-models_path = Path("models")
-assert models_path.is_dir()
+model_path = Path("models/20260504_105359")
+assert model_path.is_dir()
+
+dist_name = "iran"
 
 dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
 
 # %%
 
-dataset_train, dataset_valid = DatasetTreeAI("ID", "train", 0).split(
+dataset_train, dataset_valid = DatasetTreeAI(f"OOD_{dist_name}", "train", 0).split(
     0.2,
     train_augmentations=make_base_train_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
     test_augmentations=make_base_test_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
@@ -34,12 +36,16 @@ dataloader_valid = dataset_valid.loader(batch_size)
 
 device = torch.device("cuda")
 
-base_lr = 5e-4
-num_epochs = 100
+base_lr = 5e-5
+num_epochs = 25
 
-model = UNet(len(dataset_stats["y_counts"]), norm="instance").to(device)
-weights = calc_class_weights(torch.Tensor(list(dataset_stats["y_counts"].values()))).to(device)
-loss_fn = TverskyLoss(alpha=0.3, beta=0.7, class_weights=weights).to(device)
+model = UNet.load(model_path / "model.json", model_path / "model.pt").to(device)
+
+# for module in model.get_encoder_modules():
+#     for param in module.parameters():
+#         param.requires_grad = False
+
+loss_fn = FocalTverskyLoss(alpha=0.3, beta=0.7, gamma=1.3).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=base_lr)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=base_lr * 0.01)
 
@@ -48,5 +54,5 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epoc
 run_loop(
     device, model, optimizer, scheduler, loss_fn,
     num_epochs, dataloader_train, dataloader_valid,
-    models_path / time.strftime("%Y%m%d_%H%M%S")
+    f"{model_path.as_posix()}_{dist_name}_{time.strftime("%Y%m%d_%H%M%S")}"
 )

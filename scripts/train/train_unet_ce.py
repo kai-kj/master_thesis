@@ -34,8 +34,8 @@ dataloader_valid = dataset_valid.loader(batch_size)
 
 device = torch.device("cuda")
 
-base_lr = 1e-3
-num_epochs = 150
+base_lr = 5e-3
+num_epochs = 200
 
 model = UNet(len(dataset_stats["y_counts"]), norm="instance").to(device)
 weights = calc_class_weights(torch.Tensor(list(dataset_stats["y_counts"].values()))).to(device)
@@ -48,5 +48,5 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epoc
 run_loop(
     device, model, optimizer, scheduler, loss_fn,
     num_epochs, dataloader_train, dataloader_valid,
-    models_path / time.strftime("%Y%m%d_%H%M%S")
+    models_path / f"unet_ce_{time.strftime("%Y%m%d_%H%M%S")}"
 )

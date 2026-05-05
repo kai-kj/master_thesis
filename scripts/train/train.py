@@ -5,6 +5,7 @@ from pathlib import Path
 import time
 
 import numpy as np
+import sklearn.metrics as skm
 import pandas as pd
 import torch
 from tqdm.auto import tqdm
@@ -20,7 +21,8 @@ def run_batch_train(
         loss_fn: torch.nn.Module,
         x: torch.Tensor,
         y_true: torch.Tensor,
-) -> float:
+        return_y: bool = False,
+) -> tuple[float, np.ndarray | None, np.ndarray | None]:
     model.train()
     optimizer.zero_grad()
 
@@ -34,16 +36,20 @@ def run_batch_train(
     scaler.step(optimizer)
     scaler.update()
 
-    return y_loss.item()
+    if return_y:
+        return y_loss.item(), y_true.detach().cpu().numpy(), y_pred.detach().cpu().numpy()
+    else:
+        return y_loss.item(), None, None
 
 
-def run_batch_valid(
+def run_batch_test(
         device: torch.device,
         model: torch.nn.Module,
         loss_fn: torch.nn.Module,
         x: torch.Tensor,
         y_true: torch.Tensor,
-) -> float:
+        return_y: bool = False,
+) -> tuple[float, np.ndarray | None, np.ndarray | None]:
     model.eval()
 
     x, y_true = x.to(device), y_true.to(device).squeeze(1)
@@ -52,7 +58,12 @@ def run_batch_valid(
         y_pred = model(x)
         y_loss = loss_fn(y_pred, y_true)
 
-    return y_loss.item()
+    if return_y:
+        y_true_np = y_true.detach().cpu().numpy().flatten()
+        y_pred_np = np.argmax(y_pred.detach().cpu().numpy(), axis=1).flatten()
+        return y_loss.item(), y_true_np, y_pred_np
+    else:
+        return y_loss.item(), None, None
 
 
 def run_epoch(
@@ -64,25 +75,40 @@ def run_epoch(
         dataloader_train: torch.utils.data.DataLoader,
         dataloader_valid: torch.utils.data.DataLoader,
         scaler: torch.amp.grad_scaler.GradScaler,
-) -> tuple[float, float, float]:
+        calc_confusion: bool = False,
+) -> tuple[float, float, float, np.ndarray | None]:
     train_loss = []
     valid_loss = []
 
     for batch_x, batch_y in tqdm(dataloader_train, total=len(dataloader_train), colour="white", desc="  train"):
-        loss = run_batch_train(device, scaler, model, optimizer, loss_fn, batch_x, batch_y)
+        loss, _, _ = run_batch_train(device, scaler, model, optimizer, loss_fn, batch_x, batch_y)
         train_loss.append(loss)
 
     gc.collect()
 
+    y_pred_all = []
+    y_true_all = []
+
     for batch_x, batch_y in tqdm(dataloader_valid, total=len(dataloader_valid), colour="white", desc="  valid"):
-        loss = run_batch_valid(device, model, loss_fn, batch_x, batch_y)
+        loss, y_true, y_pred = run_batch_test(device, model, loss_fn, batch_x, batch_y, return_y=calc_confusion)
         valid_loss.append(loss)
+        y_true_all.append(y_true)
+        y_pred_all.append(y_pred)
 
     gc.collect()
 
     scheduler.step()
 
-    return float(np.mean(train_loss)), float(np.mean(valid_loss)), scheduler.get_last_lr()[0]
+    return (
+        float(np.mean(train_loss)),
+        float(np.mean(valid_loss)),
+        scheduler.get_last_lr()[0],
+        skm.confusion_matrix(
+            np.concatenate(y_true_all, axis=0),
+            np.concatenate(y_pred_all, axis=0),
+            labels=list(range(10))
+        ) if calc_confusion else None
+    )
 
 
 def run_loop(
@@ -94,8 +120,10 @@ def run_loop(
         num_epochs: int,
         dataloader_train: torch.utils.data.DataLoader,
         dataloader_valid: torch.utils.data.DataLoader,
-        model_path: Path,
+        model_path: str | Path,
 ):
+    model_path = Path(model_path)
+
     print(f"training model {model_path.name}")
 
     model_path.mkdir(parents=True, exist_ok=True)
@@ -107,15 +135,19 @@ def run_loop(
     for epoch in range(num_epochs):
         print(f"epoch {epoch + 1}/{num_epochs}")
 
-        curr_train_loss, curr_valid_loss, curr_lr = run_epoch(
+        curr_train_loss, curr_valid_loss, curr_lr, confusion_matrix = run_epoch(
             device,
             model,
             optimizer, scheduler, loss_fn,
             dataloader_train, dataloader_valid,
-            scaler
+            scaler,
+            calc_confusion=True,
         )
 
-        history.append((epoch, curr_lr, curr_train_loss, curr_valid_loss))
+        assert confusion_matrix is not None
+        confusion_matrix = confusion_matrix.flatten()
+
+        history.append((epoch, curr_lr, curr_train_loss, curr_valid_loss, *confusion_matrix))
 
         print(f"  lr:         {history[-1][1]:.6f}")
         print(f"  train loss: {history[-1][2]:.6f}")
@@ -125,7 +157,9 @@ def run_loop(
             print("  best model, saving")
             model.save(model_path / "model.json", model_path / "model.pt")
 
-        pd.DataFrame(history, columns=["epoch", "lr", "train_loss", "valid_loss"]) \
+        confusion_matrix_cols = [f"cm_{i:03d}" for i in range(len(confusion_matrix))]
+
+        pd.DataFrame(history, columns=["epoch", "lr", "train_loss", "valid_loss"] + confusion_matrix_cols) \
             .to_csv(model_path / "history.csv", index=False)
 
         current_time = time.time()

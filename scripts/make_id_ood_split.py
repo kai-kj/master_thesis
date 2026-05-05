@@ -48,7 +48,7 @@ sites_ext = treeai.get_sites() \
 
 # %%
 
-other_frac_cutoff = 0.5
+other_frac_cutoff = 0.6
 
 by_site = pd.crosstab(trees_relabeled["site_id"], trees_relabeled["label_name"])
 by_site["other_frac"] = by_site["other"] / by_site.sum(axis=1)
@@ -69,39 +69,47 @@ fig.show()
 print(f"removing {sum(by_site["other_frac"] >= other_frac_cutoff)}/{len(by_site)} sites")
 by_site = by_site[by_site["other_frac"] < other_frac_cutoff].drop(columns=["other_frac"])
 
+label_map_sort = list({
+    (row[1]["model_label_name"], row[1]["model_label_id"])
+    for row in labels_map[["model_label_id", "model_label_name"]].iterrows()
+})
+
+label_map_sort = [v[0] for v in sorted(label_map_sort, key=lambda v: v[1])]
+by_site = by_site[label_map_sort[1:]]
+
 # %%
 
 id_country_province = [
     ("Canada", "Québec"),
     ("Germany", "Baden-Württemberg"),
-    # ("Spain", "Granada"),
+    ("Portugal", "Setúbal")
 ]
 
-sites_split = sites_ext.copy()
+sites_split_a = sites_ext.copy()
 
-country_mask = sites_split.apply(lambda v: v["country"] in [r[0] for r in id_country_province], axis=1)
-province_mask = sites_split.apply(lambda v: v["province"] in [r[1] for r in id_country_province], axis=1)
+country_mask = sites_split_a.apply(lambda v: v["country"] in [r[0] for r in id_country_province], axis=1)
+province_mask = sites_split_a.apply(lambda v: v["province"] in [r[1] for r in id_country_province], axis=1)
 
-sites_split["dist"] = "OOD"
-sites_split.loc[country_mask & province_mask, "dist"] = "ID"
+sites_split_a["dist"] = "OOD"
+sites_split_a.loc[country_mask & province_mask, "dist"] = "ID"
 
 print("ID countries:")
 
-for c in sites_split[sites_split["dist"] == "ID"]["country"].unique():
+for c in sites_split_a[sites_split_a["dist"] == "ID"]["country"].unique():
     print(f"- {c}")
 
 print("OOD countries:")
 
-for c in sites_split[sites_split["dist"] == "OOD"]["country"].unique():
+for c in sites_split_a[sites_split_a["dist"] == "OOD"]["country"].unique():
     print(f"- {c}")
 
-sites_split = sites_split[["site_id", "dist", "country", "province", "geometry"]]
+sites_split_a = sites_split_a[["site_id", "dist", "country", "province", "geometry"]]
 
 # %%
 
 by_country = by_site \
     .reset_index() \
-    .merge(sites_split[["site_id", "country", "province"]], on="site_id", how="left") \
+    .merge(sites_split_a[["site_id", "country", "province"]], on="site_id", how="left") \
     .drop(columns=["site_id"]) \
     .groupby(["country", "province"]) \
     .agg("sum") \
@@ -149,10 +157,56 @@ ax[1].set_ylabel("count")
 ax[1].legend(loc="upper right", fontsize="small", frameon=False)
 
 fig.tight_layout()
-fig.savefig("figures/id_ood_split.png")
+fig.savefig("figures/id_ood_split_bar.png")
+fig.show()
+
+# %%
+
+ood_country_province = [
+    ("Iran", "North Khorasan"),
+    ("Mexico", "Veracruz"),
+    ("Czechia", "Plzeňský"),
+    ("South Africa", "Limpopo"),
+    ("China", "Anhui"),
+    ("Russia", "Primor'ye"),
+]
+
+sites_split_b = sites_split_a.copy()
+
+for country, province in ood_country_province:
+    dist_name = f"OOD_{country.lower().replace(' ', '_')}"
+    sites_split_b.loc[(sites_split_b["country"] == country) & (sites_split_b["province"] == province), "dist"] \
+        = dist_name
+
+# %%
+
+fig, ax = plt.subplots(figsize=(16, 8))
+
+countries.to_crs("EPSG:3857").plot(ax=ax, color="lightgray")
+
+sites_split_b[sites_split_b["dist"] == "OOD"] \
+    .to_crs("EPSG:3857") \
+    .centroid \
+    .plot(ax=ax, color="gray", marker="^", markersize=100, label="unused")
+
+dists = sorted(list(set(sites_split_b["dist"].unique()) - {"OOD"}))
+colors = [get_hex(c) for c in get_colors(len(dists), pastel_factor=0, rng=0)]
+
+for dist, color in zip(dists, colors):
+    sites_split_b[sites_split_b["dist"] == dist] \
+        .to_crs("EPSG:3857") \
+        .centroid \
+        .plot(ax=ax, color=color, markersize=100, label=dist.replace("_", " "))
+
+ax.axis("off")
+ax.set_xlim((-20000000, 20000000))
+ax.set_ylim((-20000000 * 0.4, 20000000 * 0.6))
+ax.legend(loc="lower left")
+fig.tight_layout()
+fig.savefig("figures/id_ood_split_map.png")
 fig.show()
 
 # %%
 
 sites_split_path.parent.mkdir(parents=True, exist_ok=True)
-sites_split.to_file(sites_split_path)
+sites_split_b.to_file(sites_split_path)

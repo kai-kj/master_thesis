@@ -25,7 +25,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
     def __init__(
             self,
-            id_or_ood: str, train_or_test: str, split_n: int,
+            dist: str, train_or_test: str, split_n: int,
             indices: None | list[int] = None,
             augmentations: A.Compose | None = None,
     ):
@@ -34,12 +34,12 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         assert self.TREEAI_SEGMENTATION_PATH.exists()
         assert self.SITE_SPLIT_PATH.exists()
         assert self.LABELS_MAP_PATH.exists()
-        assert id_or_ood in ["ID", "OOD"]
+        assert dist.startswith("ID") or dist.startswith("OOD")
         assert train_or_test in ["train", "test"]
         assert split_n in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
         # for when calling .split()
-        self._config = {"id_or_ood": id_or_ood, "train_or_test": train_or_test, "split_n": split_n}
+        self._config = {"dist": dist, "train_or_test": train_or_test, "split_n": split_n}
 
         self._treeai = TreeAISegmentation(self.TREEAI_SEGMENTATION_PATH)
 
@@ -47,7 +47,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
             .merge(gpd.read_file(self.SITE_SPLIT_PATH)[["site_id", "dist"]], on="site_id") \
             .drop(columns=["geometry"])
 
-        self._patches = self._patches[self._patches["dist"] == id_or_ood]
+        self._patches = self._patches[self._patches["dist"] == dist]
         self._patches = self._patches[self._patches[f"split_{split_n}"] == train_or_test]
 
         self._patches = self._patches[["site_id", "crop_x0", "crop_x1", "crop_y0", "crop_y1", "path_x", "path_y"]]

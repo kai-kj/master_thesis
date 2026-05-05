@@ -51,13 +51,17 @@ class FocalTverskyLoss(torch.nn.Module):
 
     def forward(self, logits, target):
         return torch.pow(self.tversky(logits, target), self.gamma).mean()
-    
+
 
 def calc_class_weights(class_counts: torch.Tensor, log_smooth: bool = True) -> torch.Tensor:
-    class_freq = class_counts / (class_counts.sum() + 1)  # avoid 0 division
+    zero_mask = class_counts == 0
+
+    class_freq = class_counts / class_counts.sum()
     weights = 1 / class_freq
 
     if log_smooth:
-        weights = torch.log(1 / class_freq)
+        weights = torch.log(weights)
+
+    weights[zero_mask] = 1
 
     return weights / weights.sum() * weights.shape[0]  # normalize around 1.0
