@@ -5,6 +5,8 @@ from typing import Literal
 from pathlib import Path
 import json
 
+from scripts.models.model import Model
+
 
 # %%
 
@@ -47,7 +49,7 @@ class ConvReLU(torch.nn.Module):
         return 1
 
 
-class UNet(torch.nn.Module):
+class UNet(Model):
     def __init__(
             self,
             n_classes,
@@ -102,8 +104,8 @@ class UNet(torch.nn.Module):
 
         self.apply_softmax = apply_softmax
 
-    def forward(self, x11):
-        x12 = self.conv11(x11)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x12 = self.conv11(x)
         x13 = self.conv12(x12)
         x21 = self.pool1(x13)
 
@@ -183,8 +185,21 @@ class UNet(torch.nn.Module):
             self.conv93,
         ]
 
-    # %%
+    def change_n_classes(self, n_classes: int):
+        in_channels = self.conv93.in_channels
+        device = next(self.conv93.parameters()).device
+        dtype = next(self.conv93.parameters()).dtype
 
+        self.conv93 = torch.nn.ConvTranspose2d(
+            in_channels=in_channels,
+            out_channels=n_classes,
+            kernel_size=1
+        ).to(device=device, dtype=dtype)
+
+        self._config["n_classes"] = n_classes
+
+
+# %%
 
 if __name__ == "__main__":
     from scripts.dataset import DatasetTreeAI

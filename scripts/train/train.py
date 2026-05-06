@@ -75,6 +75,7 @@ def run_epoch(
         dataloader_train: torch.utils.data.DataLoader,
         dataloader_valid: torch.utils.data.DataLoader,
         scaler: torch.amp.grad_scaler.GradScaler,
+        n_classes: int,
         calc_confusion: bool = False,
 ) -> tuple[float, float, float, np.ndarray | None]:
     train_loss = []
@@ -106,7 +107,7 @@ def run_epoch(
         skm.confusion_matrix(
             np.concatenate(y_true_all, axis=0),
             np.concatenate(y_pred_all, axis=0),
-            labels=list(range(10))
+            labels=list(range(n_classes))
         ) if calc_confusion else None
     )
 
@@ -121,6 +122,7 @@ def run_loop(
         dataloader_train: torch.utils.data.DataLoader,
         dataloader_valid: torch.utils.data.DataLoader,
         model_path: str | Path,
+        n_classes: int,
 ):
     model_path = Path(model_path)
 
@@ -141,6 +143,7 @@ def run_loop(
             optimizer, scheduler, loss_fn,
             dataloader_train, dataloader_valid,
             scaler,
+            n_classes,
             calc_confusion=True,
         )
 

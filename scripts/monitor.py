@@ -7,7 +7,7 @@ import numpy as np
 
 # %%
 
-model_path = Path("models/20260505_023132")
+model_path = Path("models/unet_ftv_20260505_023132_czechia_20260505_130023")
 assert model_path.is_dir()
 
 # %%

@@ -16,11 +16,16 @@ from scripts.util.seed import seed
 
 # %%
 
-model_path = Path("models/unet_ftv_20260505_023132")
+model_path = Path("models/unet_ftv_20260505_023132_south_africa_20260505_135708")
 assert model_path.is_dir()
 
 dist_name = "ID"
+# dist_name = "china"
+# dist_name = "czechia"
 # dist_name = "iran"
+# dist_name = "mexico"
+# dist_name = "russia"
+# dist_name = "south_africa"
 
 dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
 
@@ -32,7 +37,7 @@ seed(42)
 # %%
 
 dataset_test = DatasetTreeAI(
-    "ID" if dist_name == "ID" else f"OOD_{dist_name}", "test", 0,
+    "ID" if dist_name == "ID" else f"OOD_{dist_name}", "test", 0, dist_name == "south_africa",
     augmentations=make_base_test_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
 )
 
@@ -81,7 +86,7 @@ for i in range(n_samples):
     ax[2, i].axis("off")
 
 fig.tight_layout()
-fig.savefig(model_path / "results.png")
+fig.savefig(model_path / f"results_{dist_name.lower()}.png")
 fig.show()
 
 # %%
@@ -116,7 +121,7 @@ ax.set_xlabel("Predicted label")
 ax.set_ylabel("True label")
 
 fig.tight_layout()
-fig.savefig(model_path / "confusion_matrix.png")
+fig.savefig(model_path / f"confusion_matrix_{dist_name.lower()}.png")
 fig.show()
 
 # %%
@@ -127,13 +132,17 @@ for metric in ["micro", "macro", "weighted"]:
     print(f"computing {metric} metrics")
     p, r, f1, _ = skm.precision_recall_fscore_support(
         ys_true.flatten(), ys_pred.flatten(),
-        average=metric, zero_division=0.0  # type: ignore
+        average=metric, zero_division=0.0, labels=np.unique(ys_true)  # type: ignore
     )
-    iou = skm.jaccard_score(ys_true.flatten(), ys_pred.flatten(), average=metric, zero_division=0.0)  # type: ignore
+    iou = skm.jaccard_score(
+        ys_true.flatten(),
+        ys_pred.flatten(),
+        average=metric, zero_division=0.0, labels=np.unique(ys_true)  # type: ignore
+    )
     metrics.append([metric, p, r, f1, iou])
 
 metrics = pd.DataFrame(metrics, columns=["metric", "precision", "recall", "f1", "iou"])
 
 print(metrics)
 
-metrics.to_csv(model_path / "metrics.csv")
+metrics.to_csv(model_path / f"metrics_{dist_name.lower()}.csv")

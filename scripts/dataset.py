@@ -22,10 +22,12 @@ class DatasetTreeAI(torch.utils.data.Dataset):
     TREEAI_SEGMENTATION_PATH = Path("/home/kai/Thesis/data/treeai_segmentation/")
     SITE_SPLIT_PATH = Path("data/sites_split.gpkg")
     LABELS_MAP_PATH = Path("data/labels_map.csv")
+    LABELS_MAP_PATH_AFRICA = Path("data/labels_map_africa.csv")
 
     def __init__(
             self,
             dist: str, train_or_test: str, split_n: int,
+            use_africa_labels: bool = False,
             indices: None | list[int] = None,
             augmentations: A.Compose | None = None,
     ):
@@ -34,12 +36,15 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         assert self.TREEAI_SEGMENTATION_PATH.exists()
         assert self.SITE_SPLIT_PATH.exists()
         assert self.LABELS_MAP_PATH.exists()
+        assert self.LABELS_MAP_PATH_AFRICA.exists()
         assert dist.startswith("ID") or dist.startswith("OOD")
         assert train_or_test in ["train", "test"]
         assert split_n in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
         # for when calling .split()
-        self._config = {"dist": dist, "train_or_test": train_or_test, "split_n": split_n}
+        self._config = {
+            "dist": dist, "train_or_test": train_or_test, "split_n": split_n, "use_africa_labels": use_africa_labels
+        }
 
         self._treeai = TreeAISegmentation(self.TREEAI_SEGMENTATION_PATH)
 
@@ -57,7 +62,9 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
         self._augmentations = augmentations
 
-        labels_map = pd.read_csv(self.LABELS_MAP_PATH)
+        labels_map = pd.read_csv(self.LABELS_MAP_PATH) \
+            if not use_africa_labels \
+            else pd.read_csv(self.LABELS_MAP_PATH_AFRICA)
 
         self._labels_lut = torch.arange(labels_map["data_label_id"].max() + 1)  # type: ignore
 
@@ -67,29 +74,8 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         self.label_id_to_name = {int(r["model_label_id"]): str(r["model_label_name"]) for _, r in labels_map.iterrows()}
         self.label_name_to_id = {str(r["model_label_name"]): int(r["model_label_id"]) for _, r in labels_map.iterrows()}
 
-    def __len__(self):
-        return len(self._patches)
-
-    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
-        row = self._patches.iloc[idx]
-
-        x_array: np.ndarray = cv2.cvtColor(cv2.imread(row["path_x"]), cv2.COLOR_BGR2RGB)  # type: ignore
-        y_array: np.ndarray = cv2.imread(row["path_y"], cv2.IMREAD_GRAYSCALE)  # type: ignore
-
-        x_array = x_array[row["crop_y0"]:row["crop_y1"], row["crop_x0"]:row["crop_x1"], :]
-        y_array = y_array[row["crop_y0"]:row["crop_y1"], row["crop_x0"]:row["crop_x1"]]
-
-        x_array = x_array.astype(np.float32) / 255.0
-
-        if self._augmentations is not None:
-            augmented = self._augmentations(image=x_array, mask=y_array)
-            x_array = augmented["image"]
-            y_array = augmented["mask"]
-
-        x_tensor = torch.Tensor(x_array).permute(2, 0, 1)
-        y_tensor = self._labels_lut[torch.Tensor(y_array).long()]
-
-        return x_tensor, y_tensor
+    def sample(self, n: int, replace: bool = False, random_state: int | None = None):
+        self._patches = self._patches.sample(n, replace=replace, random_state=random_state)
 
     def split(
             self,
@@ -113,10 +99,11 @@ class DatasetTreeAI(torch.utils.data.Dataset):
     def loader(
             self, batch_size: int,
             num_workers: int = 4,
-            prefetch_factor: int = 2
+            prefetch_factor: int = 2,
+            others: list["DatasetTreeAI"] = [],
     ) -> torch.utils.data.DataLoader:
         return torch.utils.data.DataLoader(
-            self,
+            self if len(others) == 0 else torch.utils.data.ConcatDataset([self, *others]),
             batch_size=batch_size, shuffle=True,
             pin_memory=True, num_workers=num_workers, prefetch_factor=prefetch_factor, persistent_workers=True
         )
@@ -141,6 +128,30 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         label_counts = {self.label_id_to_name[i]: int(y_counts[i]) for i in range(len(y_counts))}
 
         return x_mean, x_std, label_counts  # type: ignore
+
+    def __len__(self):
+        return len(self._patches)
+
+    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
+        row = self._patches.iloc[idx]
+
+        x_array: np.ndarray = cv2.cvtColor(cv2.imread(row["path_x"]), cv2.COLOR_BGR2RGB)  # type: ignore
+        y_array: np.ndarray = cv2.imread(row["path_y"], cv2.IMREAD_GRAYSCALE)  # type: ignore
+
+        x_array = x_array[row["crop_y0"]:row["crop_y1"], row["crop_x0"]:row["crop_x1"], :]
+        y_array = y_array[row["crop_y0"]:row["crop_y1"], row["crop_x0"]:row["crop_x1"]]
+
+        x_array = x_array.astype(np.float32) / 255.0
+
+        if self._augmentations is not None:
+            augmented = self._augmentations(image=x_array, mask=y_array)
+            x_array = augmented["image"]
+            y_array = augmented["mask"]
+
+        x_tensor = torch.Tensor(x_array).permute(2, 0, 1)
+        y_tensor = self._labels_lut[torch.Tensor(y_array).long()]
+
+        return x_tensor, y_tensor
 
 
 def make_base_train_augmentations(

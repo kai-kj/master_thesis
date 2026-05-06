@@ -55,5 +55,6 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epoc
 run_loop(
     device, model, optimizer, scheduler, loss_fn,
     num_epochs, dataloader_train, dataloader_valid,
-    f"{model_path.as_posix()}_{dist_name}_{time.strftime("%Y%m%d_%H%M%S")}"
+    f"{model_path.as_posix()}_{dist_name}_{time.strftime("%Y%m%d_%H%M%S")}",
+    len(dataset_stats["y_counts"])
 )

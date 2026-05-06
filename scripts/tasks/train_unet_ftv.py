@@ -5,7 +5,7 @@ import time
 import torch
 import json
 
-from scripts.train.loss import calc_class_weights
+from scripts.train.loss import FocalTverskyLoss, calc_class_weights
 from scripts.train.train import run_loop
 from scripts.models.unet import UNet
 from scripts.dataset import DatasetTreeAI, make_base_train_augmentations, make_base_test_augmentations
@@ -34,12 +34,11 @@ dataloader_valid = dataset_valid.loader(batch_size)
 
 device = torch.device("cuda")
 
-base_lr = 1e-3
+base_lr = 5e-4
 num_epochs = 200
 
 model = UNet(len(dataset_stats["y_counts"]), norm="instance").to(device)
-weights = calc_class_weights(torch.Tensor(list(dataset_stats["y_counts"].values()))).to(device)
-loss_fn = torch.nn.CrossEntropyLoss(weights)
+loss_fn = FocalTverskyLoss(alpha=0.3, beta=0.7, gamma=1.3).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=base_lr)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=base_lr * 0.01)
 
@@ -48,5 +47,6 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epoc
 run_loop(
     device, model, optimizer, scheduler, loss_fn,
     num_epochs, dataloader_train, dataloader_valid,
-    models_path / time.strftime("%Y%m%d_%H%M%S")
+    models_path / f"unet_ftv_{time.strftime("%Y%m%d_%H%M%S")}",
+    len(dataset_stats["y_counts"])
 )
