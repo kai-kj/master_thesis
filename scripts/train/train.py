@@ -103,7 +103,7 @@ def run_epoch(
     return (
         float(np.mean(train_loss)),
         float(np.mean(valid_loss)),
-        scheduler.get_last_lr()[0],
+        float(scheduler.get_last_lr()[0]),
         skm.confusion_matrix(
             np.concatenate(y_true_all, axis=0),
             np.concatenate(y_pred_all, axis=0),
@@ -158,7 +158,7 @@ def run_loop(
 
         if len(history) == 1 or history[-1][3] < np.min([h[3] for h in history[:-1]]):
             print("  best model, saving")
-            model.save(model_path / "model.json", model_path / "model.pt")
+            model.save(model_path / "model.json", model_path / "model.pt")  # type: ignore
 
         confusion_matrix_cols = [f"cm_{i:03d}" for i in range(len(confusion_matrix))]
 

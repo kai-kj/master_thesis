@@ -210,12 +210,14 @@ if __name__ == "__main__":
     model = UNet(len(dataset.label_id_to_name), norm="none")
     model.eval()
 
-    torch.onnx.export(
-        model,
-        (next(iter(dataloader))[0],),
-        f"models/untrained_onnx/unet.onnx",
-        input_names=["input"],
-        output_names=["output"],
-        external_data=False,
-        dynamo=True,
-    )
+    print(f"parameter count: {model.count_parameters() / 1000000:.2f}M")
+
+    # torch.onnx.export(
+    #     model,
+    #     (next(iter(dataloader))[0],),
+    #     f"models/untrained_onnx/unet.onnx",
+    #     input_names=["input"],
+    #     output_names=["output"],
+    #     external_data=False,
+    #     dynamo=True,
+    # )

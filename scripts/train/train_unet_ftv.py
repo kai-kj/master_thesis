@@ -5,7 +5,7 @@ import time
 import torch
 import json
 
-from scripts.train.loss import FocalTverskyLoss, calc_class_weights
+from scripts.train.loss import FocalTverskyLoss
 from scripts.train.train import run_loop
 from scripts.models.unet import UNet
 from scripts.dataset import DatasetTreeAI, make_base_train_augmentations, make_base_test_augmentations

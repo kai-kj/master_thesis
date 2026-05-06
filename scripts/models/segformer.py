@@ -5,9 +5,11 @@ from pathlib import Path
 from typing import Literal
 
 import torch
-from transformers import SegformerForSemanticSegmentation, SegformerConfig
+from transformers import SegformerForSemanticSegmentation, SegformerConfig, logging as transformer_logging
 
 from scripts.models.model import Model
+
+transformer_logging.set_verbosity_error()
 
 
 # %%
@@ -116,15 +118,17 @@ if __name__ == "__main__":
     dataset = DatasetTreeAI("ID", "train", 0)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
 
-    model = SegFormer(len(dataset.label_id_to_name))
+    model = SegFormer(len(dataset.label_id_to_name), "b0")
     model.eval()
 
-    torch.onnx.export(
-        model,
-        (next(iter(dataloader))[0],),
-        f"models/untrained_onnx/segformer.onnx",
-        input_names=["input"],
-        output_names=["output"],
-        external_data=False,
-        dynamo=True,
-    )
+    print(f"parameter count: {model.count_parameters() / 1000000:.2f}M")
+
+    # torch.onnx.export(
+    #     model,
+    #     (next(iter(dataloader))[0],),
+    #     f"models/untrained_onnx/segformer.onnx",
+    #     input_names=["input"],
+    #     output_names=["output"],
+    #     external_data=False,
+    #     dynamo=True,
+    # )
