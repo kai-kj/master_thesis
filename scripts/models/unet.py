@@ -52,7 +52,7 @@ class ConvReLU(torch.nn.Module):
 class UNet(Model):
     def __init__(
             self,
-            n_classes,
+            n_classes: int,
             apply_softmax: bool = False,
             norm: Literal["none", "instance", "group"] = "none",
             **kwargs
