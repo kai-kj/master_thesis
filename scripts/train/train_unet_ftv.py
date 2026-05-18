@@ -35,10 +35,10 @@ dataloader_valid = dataset_valid.loader(batch_size)
 device = torch.device("cuda")
 
 base_lr = 5e-4
-num_epochs = 200
+num_epochs = 300
 
 model = UNet(len(dataset_stats["y_counts"]), norm="instance").to(device)
-loss_fn = FocalTverskyLoss(alpha=0.3, beta=0.7, gamma=1.3).to(device)
+loss_fn = FocalTverskyLoss(alpha=0.3, beta=0.7, gamma=1.7).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=base_lr)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=base_lr * 0.01)
 

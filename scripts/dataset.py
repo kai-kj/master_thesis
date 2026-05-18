@@ -3,6 +3,7 @@
 import random
 from pathlib import Path
 import json
+from typing import Literal
 
 import albumentations as A
 import sklearn
@@ -129,10 +130,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
         return x_mean, x_std, label_counts  # type: ignore
 
-    def __len__(self):
-        return len(self._patches)
-
-    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
+    def get_xy(self, idx, apply_augmentations: bool = True) -> tuple[torch.Tensor, torch.Tensor]:
         row = self._patches.iloc[idx]
 
         x_array: np.ndarray = cv2.cvtColor(cv2.imread(row["path_x"]), cv2.COLOR_BGR2RGB)  # type: ignore
@@ -143,7 +141,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
         x_array = x_array.astype(np.float32) / 255.0
 
-        if self._augmentations is not None:
+        if apply_augmentations and (self._augmentations is not None):
             augmented = self._augmentations(image=x_array, mask=y_array)
             x_array = augmented["image"]
             y_array = augmented["mask"]
@@ -153,6 +151,12 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
         return x_tensor, y_tensor
 
+    def __len__(self):
+        return len(self._patches)
+
+    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.get_xy(idx, apply_augmentations=True)
+ 
 
 def make_base_train_augmentations(
         x_mean: tuple[float, float, float],

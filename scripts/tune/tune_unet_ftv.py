@@ -20,7 +20,6 @@ dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
 # %%
 
 for dist_name in ["china", "czechia", "iran", "mexico", "russia", "south_africa"]:
-    # for dist_name in ["china", "iran", "mexico", "russia", "south_africa"]:
     mix_ratio = 1.0 if dist_name != "south_africa" else 0.0
 
     print(f"==== TRAIN {dist_name} ====")

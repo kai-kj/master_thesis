@@ -7,24 +7,72 @@ import pandas as pd
 
 # %%
 
+# unet w/o replay
+# out_name = "unet_ftv_20260505_023132_without_replay"
+# model_paths = {
+#     "id": Path("models/unet_ftv_20260505_023132"),
+#     "china": Path("models/unet_ftv_20260505_023132_china_20260505_100645"),
+#     "czechia": Path("models/unet_ftv_20260505_023132_czechia_20260505_100757"),
+#     "iran": Path("models/unet_ftv_20260505_023132_iran_20260505_100052"),
+#     "mexico": Path("models/unet_ftv_20260505_023132_mexico_20260505_101809"),
+#     "russia": Path("models/unet_ftv_20260505_023132_russia_20260505_105416"),
+#     "south_africa": Path("models/unet_ftv_20260505_023132_south_africa_20260505_103450"),
+# }
+
+# unet w/ replay
+# out_name = "unet_ftv_20260505_023132_with_replay"
+# model_paths = {
+#     "id": Path("models/unet_ftv_20260505_023132"),
+#     "china": Path("models/unet_ftv_20260505_023132_china_20260505_133841"),
+#     "czechia": Path("models/unet_ftv_20260505_023132_czechia_20260505_130023"),
+#     "iran": Path("models/unet_ftv_20260505_023132_iran_20260505_133957"),
+#     "mexico": Path("models/unet_ftv_20260505_023132_mexico_20260505_134553"),
+#     "russia": Path("models/unet_ftv_20260505_023132_russia_20260505_134926"),
+#     "south_africa": Path("models/unet_ftv_20260505_023132_south_africa_20260505_135708"),
+# }
+
+# segformer w/o replay
+out_name = "segformer_20260506_121655_without_replay"
 model_paths = {
-    "id": Path("models/unet_ftv_20260505_023132"),
-    "china": Path("models/unet_ftv_20260505_023132_china_20260505_133841"),
-    "czechia": Path("models/unet_ftv_20260505_023132_czechia_20260505_130023"),
-    "iran": Path("models/unet_ftv_20260505_023132_iran_20260505_133957"),
-    "mexico": Path("models/unet_ftv_20260505_023132_mexico_20260505_134553"),
-    "russia": Path("models/unet_ftv_20260505_023132_russia_20260505_134926"),
-    "south_africa": Path("models/unet_ftv_20260505_023132_south_africa_20260505_135708"),
+    "id": Path("models/segformer_20260506_121655"),
+    "china": Path("models/segformer_20260506_121655_china_20260515_201515"),
+    "czechia": Path("models/segformer_20260506_121655_czechia_20260515_201608"),
+    "iran": Path("models/segformer_20260506_121655_iran_20260515_202218"),
+    "mexico": Path("models/segformer_20260506_121655_mexico_20260515_202508"),
+    "russia": Path("models/segformer_20260506_121655_russia_20260515_202653"),
+    "south_africa": Path("models/segformer_20260506_121655_south_africa_20260515_203020"),
 }
 
+# segformer w/ replay
+# out_name = "segformer_20260506_121655_with_replay"
+# model_paths = {
+#     "id": Path("models/segformer_20260506_121655"),
+#     "china": Path("models/segformer_20260506_121655_china_20260515_181757"),
+#     "czechia": Path("models/segformer_20260506_121655_czechia_20260515_181913"),
+#     "iran": Path("models/segformer_20260506_121655_iran_20260515_183035"),
+#     "mexico": Path("models/segformer_20260506_121655_mexico_20260515_183538"),
+#     "russia": Path("models/segformer_20260506_121655_russia_20260515_183835"),
+#     "south_africa": Path("models/segformer_20260506_121655_south_africa_20260515_184452"),
+# }
+
 model_names = {
-    "id": "base model",
-    "china": "China FT model",
-    "czechia": "Czechia FT model",
-    "iran": "Iran FT model",
-    "mexico": "Mexico FT model",
-    "russia": "Russia FT model",
-    "south_africa": "South Africa FT model",
+    "id": "core model",
+    "china": "china model",
+    "czechia": "czechia model",
+    "iran": "iran model",
+    "mexico": "mexico model",
+    "russia": "russia model",
+    "south_africa": "south_africa model",
+}
+
+data_names = {
+    "id": "core data",
+    "china": "china data",
+    "czechia": "czechia data",
+    "iran": "iran data",
+    "mexico": "mexico data",
+    "russia": "russia data",
+    "south_africa": "south_africa data",
 }
 
 for model_path in model_paths.values():
@@ -32,73 +80,66 @@ for model_path in model_paths.values():
 
 # %%
 
-pre_ft_performances = []
-post_ft_performances = []
-post_ft_id_performances = []
+metric = "f1"
+agg = "weighted"
+
+metrics = dict()
+
+columns = list(model_paths.keys())
 
 for model_id, model_path in model_paths.items():
-    if model_id != "south_africa":
-        pre_ft_performance = pd.read_csv(model_paths["id"] / f"metrics_{model_id}.csv")
-        pre_ft_performances.append((pre_ft_performance["f1"][2], pre_ft_performance["iou"][2]))
-    else:
-        pre_ft_performances.append((0, 0))
+    model_metrics = dict()
 
-    if model_id != "id":
-        post_ft_performance = pd.read_csv(model_path / f"metrics_{model_id}.csv")
-        post_ft_performances.append((post_ft_performance["f1"][2], post_ft_performance["iou"][2]))
-    else:
-        post_ft_performances.append((0, 0))
+    for data_id in model_paths.keys():
+        metrics_path = model_path / f"metrics_{data_id}.csv"
 
-    if model_id != "id" and model_id != "south_africa":
-        post_ft_id_performance = pd.read_csv(model_path / f"metrics_id.csv")
-        post_ft_id_performances.append((post_ft_id_performance["f1"][2], post_ft_id_performance["iou"][2]))
-    else:
-        post_ft_id_performances.append((0, 0))
+        if not metrics_path.is_file():
+            continue
 
-summary = [
-    (v[0][0], v[0][1], v[1][0], v[1][1], v[2][0], v[2][1])
-    for v in zip(pre_ft_performances, post_ft_performances, post_ft_id_performances)
-]
+        df = pd.read_csv(metrics_path).set_index("metric")
+        model_metrics[data_names[data_id]] = df.loc[agg, metric]
 
-summary = pd.DataFrame(
-    summary,
-    columns=["pre_ft_f1", "pre_ft_iou", "post_ft_f1", "post_ft_iou", "post_ft_id_f1", "post_ft_id_iou"],
-)
+    metrics[model_names[model_id]] = model_metrics
 
-summary.insert(0, "dist", model_paths.keys())  # type: ignore
+metrics = pd.DataFrame(metrics).transpose()
 
 # %%
 
-for metric_id, metric_name in [("f1", "weighted F1 score"), ("iou", "weighted IoU")]:
-    fig, ax = plt.subplots(figsize=(10, 6))
+xs = []
+ys = []
 
-    xs_a = np.arange(len(summary["dist"])) * 4 + 0
-    xs_b = np.arange(len(summary["dist"])) * 4 + 1
-    xs_c = np.arange(len(summary["dist"])) * 4 + 2
+for data_name in metrics.keys():
+    for model_name in metrics.index:
+        value: np.float64 = metrics.loc[model_name, data_name]  # type: ignore
 
-    ax.vlines(xs_a, 0, 1.1, zorder=1, color="lightgrey")
-    ax.vlines(xs_b, 0, 1.1, zorder=1, color="lightgrey")
-    ax.vlines(xs_c, 0, 1.1, zorder=1, color="lightgrey")
+        if not np.isnan(value):
+            xs.append(f"{model_name} on {data_name}")
+            ys.append(value)
 
-    ax.bar(xs_a, summary[f"pre_ft_{metric_id}"], label="before fine-tuning, on target set")
-    ax.bar(xs_b, summary[f"post_ft_{metric_id}"], label="after fine-tuning, on target set")
-    ax.bar(xs_c, summary[f"post_ft_id_{metric_id}"], label="after fine-tuning, on ID set")
+    xs.append("")
+    ys.append(0.0)
 
-    for i, v in enumerate(summary[f"pre_ft_{metric_id}"]):
-        if v != 0: ax.text(xs_a[i] - 0.5, v + 0.01, f"{v:.02f}")
+xs = xs[:-1]
+ys = ys[:-1]
 
-    for i, v in enumerate(summary[f"post_ft_{metric_id}"]):
-        if v != 0: ax.text(xs_b[i] - 0.5, v + 0.01, f"{v:.02f}")
+fig, ax = plt.subplots(figsize=(8, 5))
 
-    for i, v in enumerate(summary[f"post_ft_id_{metric_id}"]):
-        if v != 0: ax.text(xs_c[i] - 0.5, v + 0.01, f"{v:.02f}")
+for model_name in model_names.values():
+    ax.bar(
+        [i for i in range(len(xs)) if xs[i].startswith(model_name)],
+        [ys[i] for i in range(len(xs)) if xs[i].startswith(model_name)],
+        align="center", label=model_name, hatch=".." if model_name == "core model" else "",
+    )
 
-    ax.spines[["top", "right"]].set_visible(False)
-    ax.set_ylim(0, 1.1)
-    ax.set_ylabel(metric_name)
-    ax.set_xticks(np.arange(len(summary["dist"])) * 4 + 1, labels=[model_names[k] for k in model_paths], rotation=20)
-    ax.legend(loc="upper right")
+    for i in [i for i in range(len(xs)) if xs[i].startswith(model_name)]:
+        ax.text(i - 0.45, (int(ys[i] * 100) + 1) / 100 + 0.01, f"{ys[i]:.02f}", size="small")
 
-    fig.tight_layout()
-    fig.savefig(f"figures/tune_summary_{metric_id}.png")
-    fig.show()
+ax.spines[["top", "right"]].set_visible(False)
+ax.set_ylim(0, 1.15)
+ax.set_ylabel(f"{agg} {metric} score")
+ax.set_xticks([2.5, 7.5, 10.5, 13.5, 16.5, 19.5, 22], data_names.values(), rotation=30)
+ax.legend(loc="upper right", ncols=4, frameon=False)
+
+fig.tight_layout()
+fig.savefig(f"figures/tune_summary_{out_name}_{agg}_{metric}.png")
+fig.show()
