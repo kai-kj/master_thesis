@@ -4,3 +4,6 @@
 [submodule "dependencies/treeai_segmentation"]
 	path = dependencies/treeai_segmentation
 	url = git@gitlab.ethz.ch:kkitagawa/treeai_segmentation.git
+[submodule "dependencies/TransUNet"]
+	path = dependencies/TransUNet
+	url = https://github.com/Beckschen/TransUNet.git

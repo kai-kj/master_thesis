@@ -2,6 +2,7 @@
 /.venv/
 /.python-version
 /uv.lock
+__pycache__
 
 # editors
 /.vscode/
