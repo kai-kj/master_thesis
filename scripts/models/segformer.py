@@ -70,6 +70,12 @@ class SegFormer(Model):
     def get_decoder_modules(self) -> list[torch.nn.Module]:
         return [self.model.decode_head]  # type: ignore
 
+    def get_encoder_parameters(self) -> list[torch.nn.parameter.Parameter]:
+        return [p for m in self.get_encoder_modules() for p in m.parameters()]
+
+    def get_decoder_parameters(self) -> list[torch.nn.parameter.Parameter]:
+        return [p for m in self.get_decoder_modules() for p in m.parameters()]
+
     def change_n_classes(self, n_classes: int):
         head = self.model.decode_head  # type: ignore
 
@@ -118,10 +124,12 @@ if __name__ == "__main__":
     dataset = DatasetTreeAI("ID", "train", 0)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
 
-    model = SegFormer(len(dataset.label_id_to_name), "b0")
+    model = SegFormer(len(dataset.label_id_to_name), "b2")
     model.eval()
 
     print(f"parameter count: {model.count_parameters() / 1000000:.2f}M")
+    print(f"in  shape: {next(iter(dataloader))[0].shape}")
+    print(f"out shape: {model(next(iter(dataloader))[0]).shape}")
 
     # torch.onnx.export(
     #     model,

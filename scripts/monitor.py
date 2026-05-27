@@ -8,12 +8,7 @@ import numpy as np
 # %%
 
 model_paths = [
-    Path("models/segformer_20260506_121655_china_20260515_201515"),
-    Path("models/segformer_20260506_121655_czechia_20260515_201608"),
-    Path("models/segformer_20260506_121655_iran_20260515_202218"),
-    Path("models/segformer_20260506_121655_mexico_20260515_202508"),
-    Path("models/segformer_20260506_121655_russia_20260515_202653"),
-    Path("models/segformer_20260506_121655_south_africa_20260515_203020"),
+    Path("models/transunet_20260527_181604"),
 ]
 
 for model_path in model_paths:

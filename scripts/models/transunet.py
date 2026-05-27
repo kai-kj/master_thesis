@@ -13,19 +13,19 @@ from scripts.models.model import Model
 # %%
 
 class MultiHeadAttention(torch.nn.Module):
-    def __init__(self, embedding_dim, head_num):
+    def __init__(self, embedding_size: int, head_count):
         super().__init__()
 
-        self.head_num = head_num
-        self.dk = (embedding_dim // head_num) ** (1 / 2)
+        self.head_count = head_count
+        self.dk = (embedding_size // head_count) ** (1 / 2)
 
-        self.qkv_layer = torch.nn.Linear(embedding_dim, embedding_dim * 3, bias=False)
-        self.out_attention = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.qkv_layer = torch.nn.Linear(embedding_size, embedding_size * 3, bias=False)
+        self.out_attention = torch.nn.Linear(embedding_size, embedding_size, bias=False)
 
-    def forward(self, x, mask=None):
-        qkv = self.qkv_layer(x)
+    def forward(self, x0, mask=None):
+        qkv = self.qkv_layer(x0)
 
-        query, key, value = tuple(einops.rearrange(qkv, "b t (d k h ) -> k b h t d ", k=3, h=self.head_num))
+        query, key, value = tuple(einops.rearrange(qkv, "b t (d k h ) -> k b h t d ", k=3, h=self.head_count))
         energy = torch.einsum("... i d , ... j d -> ... i j", query, key) * self.dk
 
         if mask is not None:
@@ -33,69 +33,42 @@ class MultiHeadAttention(torch.nn.Module):
 
         attention = torch.softmax(energy, dim=-1)
 
-        x = torch.einsum("... i j , ... j d -> ... i d", attention, value)
+        x1 = torch.einsum("... i j , ... j d -> ... i d", attention, value)
+        x2 = einops.rearrange(x1, "b h t d -> b t (h d)")
 
-        x = einops.rearrange(x, "b h t d -> b t (h d)")
-        x = self.out_attention(x)
-
-        return x
-
-
-class MLP(torch.nn.Module):
-    def __init__(self, embedding_dim, mlp_dim):
-        super().__init__()
-
-        self.mlp_layers = torch.nn.Sequential(
-            torch.nn.Linear(embedding_dim, mlp_dim),
-            torch.nn.GELU(),
-            torch.nn.Dropout(0.1),
-            torch.nn.Linear(mlp_dim, embedding_dim),
-            torch.nn.Dropout(0.1)
-        )
-
-    def forward(self, x):
-        x = self.mlp_layers(x)
-
-        return x
+        return self.out_attention(x2)
 
 
 class TransformerEncoderBlock(torch.nn.Module):
-    def __init__(self, embedding_dim, head_num, mlp_dim):
+    def __init__(self, embedding_size: int, head_count: int, mlp_size: int):
         super().__init__()
 
-        self.multi_head_attention = MultiHeadAttention(embedding_dim, head_num)
-        self.mlp = MLP(embedding_dim, mlp_dim)
+        self.mha = MultiHeadAttention(embedding_size, head_count)
 
-        self.layer_norm1 = torch.nn.LayerNorm(embedding_dim)
-        self.layer_norm2 = torch.nn.LayerNorm(embedding_dim)
+        self.drop = torch.nn.Dropout(0.1)
 
-        self.dropout = torch.nn.Dropout(0.1)
+        self.norm1 = torch.nn.LayerNorm(embedding_size)
 
-    def forward(self, x):
-        _x = self.multi_head_attention(x)
-        _x = self.dropout(_x)
-        x = x + _x
-        x = self.layer_norm1(x)
+        self.mlp = torch.nn.Sequential(
+            torch.nn.Linear(embedding_size, mlp_size),
+            torch.nn.GELU(),
+            torch.nn.Dropout(0.1),
+            torch.nn.Linear(mlp_size, embedding_size),
+            torch.nn.Dropout(0.1)
+        )
 
-        _x = self.mlp(x)
-        x = x + _x
-        x = self.layer_norm2(x)
+        self.norm2 = torch.nn.LayerNorm(embedding_size)
 
-        return x
+    def forward(self, x0):
+        x1 = self.mha(x0)
+        x2 = self.drop(x1)
+        x3 = x0 + x2
+        x4 = self.norm1(x3)
 
+        x5 = self.mlp(x4)
+        x6 = x4 + x5
 
-class TransformerEncoder(torch.nn.Module):
-    def __init__(self, embedding_dim, head_num, mlp_dim, block_num=12):
-        super().__init__()
-
-        self.layer_blocks = torch.nn.ModuleList(
-            [TransformerEncoderBlock(embedding_dim, head_num, mlp_dim) for _ in range(block_num)])
-
-    def forward(self, x):
-        for layer_block in self.layer_blocks:
-            x = layer_block(x)
-
-        return x
+        return self.norm2(x6)
 
 
 class ViT(torch.nn.Module):
@@ -122,7 +95,9 @@ class ViT(torch.nn.Module):
 
         self.dropout = torch.nn.Dropout(0.1)
 
-        self.transformer = TransformerEncoder(embedding_size, head_count, mlp_size, block_count)
+        self.transformer = torch.nn.ModuleList([
+            TransformerEncoderBlock(embedding_size, head_count, mlp_size) for _ in range(block_count)
+        ])
 
     def forward(self, x0):
         image_patches = einops.rearrange(
@@ -145,9 +120,11 @@ class ViT(torch.nn.Module):
         patches += self.embedd[:tokens + 1, :]
 
         x1 = self.dropout(patches)
-        x2 = self.transformer(x1)
 
-        return x2[:, 1:, :]
+        for layer_block in self.transformer:
+            x1 = layer_block(x1)
+
+        return x1[:, 1:, :]
 
 
 class EncoderBlock(torch.nn.Module):
@@ -203,8 +180,8 @@ class TransUNet(Model):
     def __init__(
             self,
             class_count: int,
-            image_size: int,
-            in_channel_count: int,
+            image_size: int = 512,
+            in_channel_count: int = 3,
             embedding_size: int = 128,
             head_count: int = 4,
             mlp_size: int = 512,
@@ -300,8 +277,26 @@ class TransUNet(Model):
         config_path.write_text(config)
         torch.save(weights, weights_path)
 
+    def get_encoder_modules(self) -> list[torch.nn.Module]:
+        return [self.encoder_begin, self.encoder1, self.encoder2, self.encoder3]
 
-# %%
+    def get_decoder_modules(self) -> list[torch.nn.Module]:
+        return [self.encoder_end, self.decoder1, self.decoder2, self.decoder3, self.decoder_end]
+
+    def get_transformer_modules(self) -> list[torch.nn.Module]:
+        return [self.vit]
+
+    def get_encoder_parameters(self) -> list[torch.nn.parameter.Parameter]:
+        return [p for m in self.get_encoder_modules() for p in m.parameters()]
+
+    def get_decoder_parameters(self) -> list[torch.nn.parameter.Parameter]:
+        return [p for m in self.get_decoder_modules() for p in m.parameters()]
+
+    def get_transformer_parameters(self) -> list[torch.nn.parameter.Parameter]:
+        return [p for m in self.get_transformer_modules() for p in m.parameters()]
+
+        # %%
+
 
 if __name__ == "__main__":
     from scripts.dataset import DatasetTreeAI

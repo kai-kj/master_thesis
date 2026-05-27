@@ -42,8 +42,8 @@ model = SegFormer(len(dataset_stats["y_counts"]), variant="b2").to(device)
 loss_fn = FocalTverskyLoss(alpha=0.3, beta=0.7, gamma=1.3).to(device)
 
 optimizer = torch.optim.AdamW([
-    {"params": model.get_encoder_modules()[0].parameters(), "lr": base_lr_encoder},
-    {"params": model.get_decoder_modules()[0].parameters(), "lr": base_lr_decoder},
+    {"params": model.get_encoder_parameters(), "lr": base_lr_encoder},
+    {"params": model.get_decoder_parameters(), "lr": base_lr_decoder},
 ])
 
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(

@@ -211,6 +211,8 @@ if __name__ == "__main__":
     model.eval()
 
     print(f"parameter count: {model.count_parameters() / 1000000:.2f}M")
+    print(f"in  shape: {next(iter(dataloader))[0].shape}")
+    print(f"out shape: {model(next(iter(dataloader))[0]).shape}")
 
     # torch.onnx.export(
     #     model,
