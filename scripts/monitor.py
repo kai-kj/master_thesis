@@ -8,7 +8,7 @@ import numpy as np
 # %%
 
 model_paths = [
-    Path("models/transunet_20260527_181604"),
+    Path("models/swin_20260528_073901"),
 ]
 
 for model_path in model_paths:
@@ -69,7 +69,7 @@ for model_path in model_paths:
     ax1[0].legend(handles=[p1, p2, p3], loc="upper right", frameon=False)
 
     ax2_ylim_margin = (ax2.get_ylim()[1] - ax2.get_ylim()[0]) * 0.125
-    ax2.set_ylim(max(0, ax2.get_ylim()[0] - ax2_ylim_margin), ax2.get_ylim()[1] + ax2_ylim_margin)
+    ax2.set_ylim(0.0, ax2.get_ylim()[1] + ax2_ylim_margin)
     ax2.set_ylabel("learning rate")
     ax2.spines[["top"]].set_visible(False)
 

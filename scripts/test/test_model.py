@@ -10,26 +10,32 @@ from tqdm import tqdm
 import pandas as pd
 import json
 
-from scripts.models.unet import UNet
+from scripts.models.model import Model
 from scripts.dataset import DatasetTreeAI, make_base_test_augmentations
 from scripts.util.seed import seed
 
 # %%
 
-model_path = Path("models/unet_ftv_20260505_023132")
+model_path = Path("models/swin_20260528_073901_alt")
 assert model_path.is_dir()
 
-# dist_name = "ID"
+dist_name = "ID"
 # dist_name = "china"
 # dist_name = "czechia"
-dist_name = "iran"
+# dist_name = "iran"
 # dist_name = "mexico"
 # dist_name = "russia"
 # dist_name = "south_africa"
 
 dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
 
-batch_size = 3
+# x_mean = dataset_stats["x_mean"]
+# x_std = dataset_stats["x_std"]
+
+x_mean = (0.485, 0.456, 0.406)
+x_std = (0.229, 0.224, 0.225)
+
+batch_size = 2
 device = "cuda"
 
 seed(42)
@@ -38,15 +44,17 @@ seed(42)
 
 dataset_test = DatasetTreeAI(
     "ID" if dist_name == "ID" else f"OOD_{dist_name}", "test", 0, dist_name == "south_africa",
-    augmentations=make_base_test_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
+    augmentations=make_base_test_augmentations(x_mean, x_std),
 )
 
 dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size, shuffle=True)
 
 # %%
 
-model = UNet.load(model_path / "model.json", model_path / "model.pt").to(device)
+model = Model.load(model_path / "model.json", model_path / "model.pt").to(device)
 model.eval()
+
+print(f"loaded model {model._name}")
 
 # %%
 

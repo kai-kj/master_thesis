@@ -34,9 +34,9 @@ dataloader_valid = dataset_valid.loader(batch_size)
 
 device = torch.device("cuda")
 
-base_lr_backbone = 1e-5
-base_lr_dhead = 1e-4
-base_lr_ahead = 1e-4
+base_lr_backbone = 1e-6
+base_lr_dhead = 1e-5
+base_lr_ahead = 1e-5
 num_epochs = 100
 
 model = SwinUPerNet(len(dataset_stats["y_counts"]), variant="b").to(device)

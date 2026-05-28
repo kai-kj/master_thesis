@@ -7,7 +7,7 @@ import json
 
 from scripts.train.loss import FocalTverskyLoss
 from scripts.train.train import run_loop
-from scripts.models.transunet_pretrained import TransUNet
+from scripts.models.transunet import TransUNet
 from scripts.dataset import DatasetTreeAI, make_base_train_augmentations, make_base_test_augmentations
 
 # %%

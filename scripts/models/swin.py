@@ -1,9 +1,6 @@
 # %%
 
-import json
-from pathlib import Path
 from typing import Literal
-
 import torch
 from transformers import UperNetForSemanticSegmentation, UperNetConfig, logging as transformer_logging
 
@@ -31,6 +28,7 @@ class SwinUPerNet(Model):
     ):
         super().__init__()
 
+        self._name = "SwinUPerNet"
         self._config = {
             "n_classes": n_classes,
             "variant": variant,
@@ -79,31 +77,6 @@ class SwinUPerNet(Model):
     def get_ahead_parameters(self) -> list[torch.nn.parameter.Parameter]:
         return [p for m in self.get_ahead_modules() for p in m.parameters()]
 
-    @staticmethod
-    def load(config_path: str | Path, weights_path: str | Path) -> "SwinUPerNet":
-        config_path = Path(config_path)
-        weights_path = Path(weights_path)
-
-        config = json.loads(config_path.read_text())
-        weights = torch.load(weights_path, weights_only=True)
-
-        assert config["name"] == "SwinUPerNet"
-
-        swin = SwinUPerNet(**{**config, "get_weights": False})
-        swin.load_state_dict(weights)
-
-        return swin
-
-    def save(self, config_path: str | Path, weights_path: str | Path):
-        config_path = Path(config_path)
-        weights_path = Path(weights_path)
-
-        config = json.dumps({**self._config, "name": "SwinUPerNet"}, indent=2)
-        weights = self.state_dict()
-
-        config_path.write_text(config)
-        torch.save(weights, weights_path)
-
 
 # %%
 
@@ -120,13 +93,3 @@ if __name__ == "__main__":
     print(f"parameter count: {model.count_parameters() / 1000000:.2f}M")
     print(f"in  shape: {next(iter(dataloader))[0].shape}")
     print(f"out shape: {model(next(iter(dataloader))[0]).shape}")
-
-    # torch.onnx.export(
-    #     model,
-    #     (next(iter(dataloader))[0],),
-    #     f"models/untrained_onnx/segformer.onnx",
-    #     input_names=["input"],
-    #     output_names=["output"],
-    #     external_data=False,
-    #     dynamo=True,
-    # )

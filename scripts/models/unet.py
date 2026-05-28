@@ -2,8 +2,6 @@
 
 import torch
 from typing import Literal
-from pathlib import Path
-import json
 
 from scripts.models.model import Model
 
@@ -59,6 +57,7 @@ class UNet(Model):
     ):
         super().__init__()
 
+        self._name = "UNet"
         self._config = {"n_classes": n_classes, "apply_softmax": apply_softmax, "norm": norm}
 
         # in -> 1024x1024x3
@@ -143,31 +142,6 @@ class UNet(Model):
 
         return torch.nn.functional.softmax(x101, dim=1) if self.apply_softmax else x101
 
-    @staticmethod
-    def load(config_path: str | Path, weights_path: str | Path) -> "UNet":
-        config_path = Path(config_path)
-        weights_path = Path(weights_path)
-
-        config = json.loads(config_path.read_text())
-        weights = torch.load(weights_path, weights_only=True)
-
-        assert config["name"] == "UNet"
-
-        unet = UNet(**config)
-        unet.load_state_dict(weights)
-
-        return unet
-
-    def save(self, config_path: str | Path, weights_path: str | Path):
-        config_path = Path(config_path)
-        weights_path = Path(weights_path)
-
-        config = json.dumps({**self._config, "name": "UNet"}, indent=2)
-        weights = self.state_dict()
-
-        config_path.write_text(config)
-        torch.save(weights, weights_path)
-
     def get_encoder_modules(self) -> list[torch.nn.Module]:
         return [
             self.conv11, self.conv12,
@@ -213,13 +187,3 @@ if __name__ == "__main__":
     print(f"parameter count: {model.count_parameters() / 1000000:.2f}M")
     print(f"in  shape: {next(iter(dataloader))[0].shape}")
     print(f"out shape: {model(next(iter(dataloader))[0]).shape}")
-
-    # torch.onnx.export(
-    #     model,
-    #     (next(iter(dataloader))[0],),
-    #     f"models/untrained_onnx/unet.onnx",
-    #     input_names=["input"],
-    #     output_names=["output"],
-    #     external_data=False,
-    #     dynamo=True,
-    # )
