@@ -17,7 +17,7 @@ import numpy as np
 #     Path("models/segformer_20260531_104250_south_africa_20260531_165502"),
 # ]
 
-model_paths = [Path("models/transunet_20260612_170208")]
+model_paths = [Path("models/swin_20260612_203922")]
 
 for model_path in model_paths:
     assert model_path.is_dir()

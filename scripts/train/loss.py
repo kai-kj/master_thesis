@@ -1,9 +1,6 @@
 import torch
 from typing import Literal
 
-import pytorch_optimizer.loss.tversky
-import pytorch_optimizer.loss.focal
-
 
 class TverskyLoss(torch.nn.Module):
     def __init__(

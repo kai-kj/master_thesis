@@ -72,16 +72,17 @@ def run_epoch(
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler.LRScheduler,
         loss_fn: torch.nn.Module,
-        dataloader_train: torch.utils.data.DataLoader,
-        dataloader_valid: torch.utils.data.DataLoader,
+        dl_train: torch.utils.data.DataLoader,
+        dl_valid: torch.utils.data.DataLoader,
         scaler: torch.amp.grad_scaler.GradScaler,
         n_classes: int,
         calc_confusion: bool = False,
+        silent: bool = True,
 ) -> tuple[float, float, float, np.ndarray | None]:
     train_loss = []
     valid_loss = []
 
-    for batch_x, batch_y in tqdm(dataloader_train, total=len(dataloader_train), colour="white", desc="  train"):
+    for batch_x, batch_y in tqdm(dl_train, total=len(dl_train), colour="white", desc="  train", disable=silent):
         loss, _, _ = run_batch_train(device, scaler, model, optimizer, loss_fn, batch_x, batch_y)
         train_loss.append(loss)
 
@@ -90,7 +91,7 @@ def run_epoch(
     y_pred_all = []
     y_true_all = []
 
-    for batch_x, batch_y in tqdm(dataloader_valid, total=len(dataloader_valid), colour="white", desc="  valid"):
+    for batch_x, batch_y in tqdm(dl_valid, total=len(dl_valid), colour="white", desc="  valid", disable=silent):
         loss, y_true, y_pred = run_batch_test(device, model, loss_fn, batch_x, batch_y, return_y=calc_confusion)
         valid_loss.append(loss)
         y_true_all.append(y_true)
@@ -123,6 +124,7 @@ def run_loop(
         dataloader_valid: torch.utils.data.DataLoader,
         model_path: str | Path,
         n_classes: int,
+        silent: bool = False,
 ):
     model_path = Path(model_path)
 
@@ -135,7 +137,8 @@ def run_loop(
     history = []
 
     for epoch in range(num_epochs):
-        print(f"epoch {epoch + 1}/{num_epochs}")
+        if not silent:
+            print(f"epoch {epoch + 1}/{num_epochs}")
 
         curr_train_loss, curr_valid_loss, curr_lr, confusion_matrix = run_epoch(
             device,
@@ -145,6 +148,7 @@ def run_loop(
             scaler,
             n_classes,
             calc_confusion=True,
+            silent=silent
         )
 
         assert confusion_matrix is not None
@@ -152,12 +156,12 @@ def run_loop(
 
         history.append((epoch, curr_lr, curr_train_loss, curr_valid_loss, *confusion_matrix))
 
-        print(f"  lr:         {history[-1][1]:.6f}")
-        print(f"  train loss: {history[-1][2]:.6f}")
-        print(f"  valid loss: {history[-1][3]:.6f}")
+        if not silent:
+            #     print(f"  lr:         {history[-1][1]:.6f}")
+            print(f"  loss: {history[-1][2]:.6f} (train), {history[-1][3]:.6f} (valid)")
 
         if len(history) == 1 or history[-1][3] < np.min([h[3] for h in history[:-1]]):
-            print("  best model, saving")
+            if not silent: print("  best model, saving")
             model.save(model_path / "model.json", model_path / "model.pt")  # type: ignore
 
         confusion_matrix_cols = [f"cm_{i:03d}" for i in range(len(confusion_matrix))]
@@ -169,8 +173,18 @@ def run_loop(
         time_per_epoch = (current_time - start_time) / (epoch + 1)
         remaining_time = time_per_epoch * (num_epochs - epoch - 1)
 
-        print(f"  {time.strftime("%H:%M:%S", time.gmtime(time_per_epoch))} per epoch")
-        print(f"  {time.strftime("%H:%M:%S", time.gmtime(remaining_time))} remaining")
+        if not silent:
+            print(
+                f"  {time.strftime("%H:%M:%S", time.gmtime(remaining_time))} remaining" +
+                f" ({time.strftime("%H:%M:%S", time.gmtime(time_per_epoch))} per epoch)"
+            )
+
+        if silent:
+            print(
+                f"- epoch {epoch + 1}/{num_epochs} " +
+                f"- loss: {history[-1][2]:.4f} (train), {history[-1][3]:.4f} (valid) " +
+                f"- {time.strftime("%H:%M:%S", time.gmtime(remaining_time))} remaining"
+            )
 
     end_time = time.time()
     total_time = time.strftime("%H:%M:%S", time.gmtime(end_time - start_time))

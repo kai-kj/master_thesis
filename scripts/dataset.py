@@ -159,8 +159,8 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
 
 def make_base_train_augmentations(
-        x_mean: tuple[float, float, float],
-        x_std: tuple[float, float, float]
+        x_mean: tuple[float, float, float] = (0.485, 0.456, 0.406),
+        x_std: tuple[float, float, float] = (0.229, 0.224, 0.225),
 ) -> A.Compose:
     return A.Compose([
         # Geometric
@@ -169,10 +169,6 @@ def make_base_train_augmentations(
         A.Rotate(limit=(-90.0, 90.0), p=1.0),
 
         # Sensor
-        # A.RandomBrightnessContrast(brightness_limit=(-0.05, 0.05), contrast_limit=(-0.05, 0.05), p=0.5),
-        # A.HueSaturationValue(hue_shift_limit=(-5, 5), sat_shift_limit=(-5, 5), val_shift_limit=(-5, 5), p=0.5),
-        # A.GaussianBlur(blur_limit=(3, 3), p=0.125),
-
         A.RandomBrightnessContrast(brightness_limit=(-0.1, 0.1), contrast_limit=(-0.1, 0.1), p=0.5),
         A.HueSaturationValue(hue_shift_limit=(-10, 10), sat_shift_limit=(-10, 10), val_shift_limit=(-10, 10), p=0.5),
         A.GaussianBlur(blur_limit=(3, 3), p=0.125),
@@ -183,8 +179,8 @@ def make_base_train_augmentations(
 
 
 def make_base_test_augmentations(
-        x_mean: tuple[float, float, float],
-        x_std: tuple[float, float, float]
+        x_mean: tuple[float, float, float] = (0.485, 0.456, 0.406),
+        x_std: tuple[float, float, float] = (0.229, 0.224, 0.225),
 ) -> A.Compose:
     return A.Compose([
         A.Normalize(mean=x_mean, std=x_std, max_pixel_value=1.0, p=1.0),
