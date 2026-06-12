@@ -25,7 +25,7 @@ class SegFormer(Model):
     def __init__(
             self,
             n_classes: int,
-            variant: Literal["b0", "b1", "b2", "b3", "b4", "b5"] = "b0",
+            variant: Literal["b0", "b1", "b2", "b3", "b4", "b5"] = "b2",
             apply_softmax: bool = False,
             get_weights: bool = True,
             **kwargs
@@ -107,5 +107,13 @@ if __name__ == "__main__":
     model.eval()
 
     print(f"parameter count: {model.count_parameters() / 1000000:.2f}M")
-    print(f"in  shape: {next(iter(dataloader))[0].shape}")
-    print(f"out shape: {model(next(iter(dataloader))[0]).shape}")
+
+    print(f"before change_n_classes,")
+    print(f"- in  shape: {next(iter(dataloader))[0].shape}")
+    print(f"- out shape: {model(next(iter(dataloader))[0]).shape}")
+
+    model.change_n_classes(8)
+
+    print(f"after change_n_classes,")
+    print(f"- in  shape: {next(iter(dataloader))[0].shape}")
+    print(f"- out shape: {model(next(iter(dataloader))[0]).shape}")

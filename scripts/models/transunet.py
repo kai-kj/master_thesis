@@ -113,5 +113,13 @@ if __name__ == "__main__":
     model.eval()
 
     print(f"parameter count: {model.count_parameters() / 1000000:.2f}M")
-    print(f"in  shape: {next(iter(dataloader))[0].shape}")
-    print(f"out shape: {model(next(iter(dataloader))[0]).shape}")
+
+    print(f"before change_n_classes,")
+    print(f"- in  shape: {next(iter(dataloader))[0].shape}")
+    print(f"- out shape: {model(next(iter(dataloader))[0]).shape}")
+
+    model.change_n_classes(8)
+
+    print(f"after change_n_classes,")
+    print(f"- in  shape: {next(iter(dataloader))[0].shape}")
+    print(f"- out shape: {model(next(iter(dataloader))[0]).shape}")

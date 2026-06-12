@@ -36,7 +36,7 @@ device = torch.device("cuda")
 
 base_lr_encoder = 1e-5
 base_lr_decoder = 1e-4
-num_epochs = 50
+num_epochs = 100
 
 model = SegFormer(len(dataset_stats["y_counts"]), variant="b2").to(device)
 loss_fn = FocalTverskyLoss(alpha=0.3, beta=0.7, gamma=1.3).to(device)

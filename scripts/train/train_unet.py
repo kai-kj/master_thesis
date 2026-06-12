@@ -7,7 +7,7 @@ import json
 
 from scripts.train.loss import FocalTverskyLoss
 from scripts.train.train import run_loop
-from scripts.models.swin_upernet import SwinUPerNet
+from scripts.models.unet_res import UNetRes
 from scripts.dataset import DatasetTreeAI, make_base_train_augmentations, make_base_test_augmentations
 
 # %%
@@ -26,7 +26,7 @@ dataset_train, dataset_valid = DatasetTreeAI("ID", "train", 0).split(
     random_state=42,
 )
 
-batch_size = 2
+batch_size = 16
 dataloader_train = dataset_train.loader(batch_size)
 dataloader_valid = dataset_valid.loader(batch_size)
 
@@ -34,24 +34,24 @@ dataloader_valid = dataset_valid.loader(batch_size)
 
 device = torch.device("cuda")
 
-base_lr_backbone = 1e-6
-base_lr_dhead = 1e-5
-base_lr_ahead = 1e-5
+base_lr_encoder = 1e-5
+base_lr_decoder = 1e-4
+base_lr_head = 1e-4
 num_epochs = 100
 
-model = SwinUPerNet(len(dataset_stats["y_counts"]), variant="b").to(device)
+model = UNetRes(len(dataset_stats["y_counts"]), "resnet34").to(device)
 loss_fn = FocalTverskyLoss(alpha=0.3, beta=0.7, gamma=1.7).to(device)
 
 optimizer = torch.optim.AdamW([
-    {"params": model.get_backbone_parameters(), "lr": base_lr_backbone},
-    {"params": model.get_dhead_parameters(), "lr": base_lr_dhead},
-    {"params": model.get_ahead_parameters(), "lr": base_lr_ahead},
+    {"params": model.get_encoder_parameters(), "lr": base_lr_encoder},
+    {"params": model.get_decoder_parameters(), "lr": base_lr_decoder},
+    {"params": model.get_head_parameters(), "lr": base_lr_head},
 ])
 
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
     optimizer,
     T_max=num_epochs,
-    eta_min=min(base_lr_backbone, base_lr_dhead, base_lr_ahead) * 0.1
+    eta_min=min(base_lr_encoder, base_lr_decoder, base_lr_head) * 0.1
 )
 
 # %%
@@ -59,6 +59,6 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
 run_loop(
     device, model, optimizer, scheduler, loss_fn,
     num_epochs, dataloader_train, dataloader_valid,
-    models_path / f"swin_upernet_{time.strftime("%Y%m%d_%H%M%S")}",
+    models_path / f"unet_{time.strftime("%Y%m%d_%H%M%S")}",
     len(dataset_stats["y_counts"])
 )
