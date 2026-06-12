@@ -156,7 +156,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
     def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
         return self.get_xy(idx, apply_augmentations=True)
- 
+
 
 def make_base_train_augmentations(
         x_mean: tuple[float, float, float],

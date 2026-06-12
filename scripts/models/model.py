@@ -22,7 +22,7 @@ class Model(torch.nn.Module):
 
         match config["name"]:
             case "UNet":
-                from scripts.models.unet import UNet
+                from scripts.models.unet_scratch import UNet
                 model = UNet(**{**config, "get_weights": False})
                 model.load_state_dict(weights)
                 return model
@@ -40,8 +40,14 @@ class Model(torch.nn.Module):
                 return model
 
             case "SwinUPerNet":
-                from scripts.models.swin import SwinUPerNet
+                from scripts.models.swin_upernet import SwinUPerNet
                 model = SwinUPerNet(**{**config, "get_weights": False})
+                model.load_state_dict(weights)
+                return model
+
+            case "SwinFPN":
+                from scripts.models.swin_fpn import SwinFPN
+                model = SwinFPN(**{**config, "get_weights": False})
                 model.load_state_dict(weights)
                 return model
 
@@ -58,6 +64,9 @@ class Model(torch.nn.Module):
 
         config_path.write_text(config)
         torch.save(weights, weights_path)
+
+    def change_n_classes(self, n_classes: int):
+        raise NotImplementedError
 
     def count_parameters(self, trainable_only: bool = False) -> int:
         return sum(p.numel() for p in self.parameters() if p.requires_grad) \

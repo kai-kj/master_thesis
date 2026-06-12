@@ -8,8 +8,18 @@ import numpy as np
 # %%
 
 model_paths = [
-    Path("models/swin_20260528_073901"),
+    Path("models/segformer_20260531_104250"),
+    Path("models/segformer_20260531_104250_china_20260531_164020"),
+    Path("models/segformer_20260531_104250_czechia_20260531_164110"),
+    Path("models/segformer_20260531_104250_iran_20260531_164717"),
+    Path("models/segformer_20260531_104250_mexico_20260531_165002"),
+    Path("models/segformer_20260531_104250_russia_20260531_165142"),
+    Path("models/segformer_20260531_104250_south_africa_20260531_165502"),
 ]
+
+# model_paths = [
+#     Path("models/segformer_20260531_104250"),
+# ]
 
 for model_path in model_paths:
     assert model_path.is_dir()

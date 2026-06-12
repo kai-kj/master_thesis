@@ -32,16 +32,16 @@ import pandas as pd
 # }
 
 # segformer w/o replay
-out_name = "segformer_20260506_121655_without_replay"
-model_paths = {
-    "id": Path("models/segformer_20260506_121655"),
-    "china": Path("models/segformer_20260506_121655_china_20260515_201515"),
-    "czechia": Path("models/segformer_20260506_121655_czechia_20260515_201608"),
-    "iran": Path("models/segformer_20260506_121655_iran_20260515_202218"),
-    "mexico": Path("models/segformer_20260506_121655_mexico_20260515_202508"),
-    "russia": Path("models/segformer_20260506_121655_russia_20260515_202653"),
-    "south_africa": Path("models/segformer_20260506_121655_south_africa_20260515_203020"),
-}
+# out_name = "segformer_20260506_121655_without_replay"
+# model_paths = {
+#     "id": Path("models/segformer_20260506_121655"),
+#     "china": Path("models/segformer_20260506_121655_china_20260515_201515"),
+#     "czechia": Path("models/segformer_20260506_121655_czechia_20260515_201608"),
+#     "iran": Path("models/segformer_20260506_121655_iran_20260515_202218"),
+#     "mexico": Path("models/segformer_20260506_121655_mexico_20260515_202508"),
+#     "russia": Path("models/segformer_20260506_121655_russia_20260515_202653"),
+#     "south_africa": Path("models/segformer_20260506_121655_south_africa_20260515_203020"),
+# }
 
 # segformer w/ replay
 # out_name = "segformer_20260506_121655_with_replay"
@@ -54,6 +54,41 @@ model_paths = {
 #     "russia": Path("models/segformer_20260506_121655_russia_20260515_183835"),
 #     "south_africa": Path("models/segformer_20260506_121655_south_africa_20260515_184452"),
 # }
+
+# transunet w/ replay
+# out_name = "transunet_20260527_181604_with_replay"
+# model_paths = {
+#     "id": Path("models/transunet_20260527_181604"),
+#     "china": Path("models/transunet_20260527_181604_china_20260529_125823"),
+#     "czechia": Path("models/transunet_20260527_181604_czechia_20260529_130013"),
+#     "iran": Path("models/transunet_20260527_181604_iran_20260529_131858"),
+#     "mexico": Path("models/transunet_20260527_181604_mexico_20260529_132655"),
+#     "russia": Path("models/transunet_20260527_181604_russia_20260529_133130"),
+#     "south_africa": Path("models/transunet_20260527_181604_south_africa_20260529_134122"),
+# }
+
+# swin w/ replay
+# out_name = "swin_fpn_20260529_145014_with_replay"
+# model_paths = {
+#     "id": Path("models/swin_fpn_20260529_145014"),
+#     "china": Path("models/swin_fpn_20260529_145014_china_20260529_173831"),
+#     "czechia": Path("models/swin_fpn_20260529_145014_czechia_20260529_173955"),
+#     "iran": Path("models/swin_fpn_20260529_145014_iran_20260529_175350"),
+#     "mexico": Path("models/swin_fpn_20260529_145014_mexico_20260529_175952"),
+#     "russia": Path("models/swin_fpn_20260529_145014_russia_20260529_180330"),
+#     "south_africa": Path("models/swin_fpn_20260529_145014_south_africa_20260529_181057"),
+# }
+
+out_name = "segformer_20260531_104250"
+model_paths = {
+    "id": Path("models/segformer_20260531_104250"),
+    "china": Path("models/segformer_20260531_104250_china_20260531_164020"),
+    "czechia": Path("models/segformer_20260531_104250_czechia_20260531_164110"),
+    "iran": Path("models/segformer_20260531_104250_iran_20260531_164717"),
+    "mexico": Path("models/segformer_20260531_104250_mexico_20260531_165002"),
+    "russia": Path("models/segformer_20260531_104250_russia_20260531_165142"),
+    "south_africa": Path("models/segformer_20260531_104250_south_africa_20260531_165502"),
+}
 
 model_names = {
     "id": "core model",

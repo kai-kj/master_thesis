@@ -7,7 +7,7 @@ import json
 
 from scripts.train.loss import FocalTverskyLoss
 from scripts.train.train import run_loop
-from scripts.models.swin import SwinUPerNet
+from scripts.models.swin_upernet import SwinUPerNet
 from scripts.dataset import DatasetTreeAI, make_base_train_augmentations, make_base_test_augmentations
 
 # %%
@@ -59,6 +59,6 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
 run_loop(
     device, model, optimizer, scheduler, loss_fn,
     num_epochs, dataloader_train, dataloader_valid,
-    models_path / f"swin_{time.strftime("%Y%m%d_%H%M%S")}",
+    models_path / f"swin_upernet_{time.strftime("%Y%m%d_%H%M%S")}",
     len(dataset_stats["y_counts"])
 )

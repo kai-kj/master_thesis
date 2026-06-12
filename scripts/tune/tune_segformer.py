@@ -12,7 +12,7 @@ from scripts.dataset import DatasetTreeAI, make_base_train_augmentations, make_b
 
 # %%
 
-model_path = Path("models/segformer_20260506_121655")
+model_path = Path("models/segformer_20260531_104250")
 assert model_path.is_dir()
 
 dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())

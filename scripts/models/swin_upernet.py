@@ -3,6 +3,7 @@
 from typing import Literal
 import torch
 from transformers import UperNetForSemanticSegmentation, UperNetConfig, logging as transformer_logging
+from pathlib import Path
 
 from scripts.models.model import Model
 
@@ -59,6 +60,15 @@ class SwinUPerNet(Model):
 
         return torch.nn.functional.softmax(logits, dim=1) if self.apply_softmax else logits
 
+    def change_n_classes(self, n_classes: int):
+        raise NotImplementedError
+
+    @staticmethod
+    def load(config_path: str | Path, weights_path: str | Path) -> "SwinUPerNet":
+        swin = Model.load(config_path, weights_path)
+        assert isinstance(swin, SwinUPerNet)
+        return swin
+
     def get_backbone_modules(self) -> list[torch.nn.Module]:
         return [self.model.backbone]  # type: ignore
 
@@ -79,7 +89,6 @@ class SwinUPerNet(Model):
 
 
 # %%
-
 
 if __name__ == "__main__":
     from scripts.dataset import DatasetTreeAI

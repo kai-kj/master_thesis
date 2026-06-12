@@ -56,6 +56,26 @@ class TransUNet(Model):
 
         return torch.nn.functional.softmax(out, dim=1) if self.apply_softmax else out
 
+    @staticmethod
+    def load(config_path: str | Path, weights_path: str | Path) -> "TransUNet":
+        transunet = Model.load(config_path, weights_path)
+        assert isinstance(transunet, TransUNet)
+        return transunet
+
+    def change_n_classes(self, n_classes: int):
+        head = self.model.segmentation_head
+        device = head[0].weight.device
+        dtype = head[0].weight.dtype
+
+        head[0] = torch.nn.Conv2d(
+            in_channels=head[0].in_channels,  # type: ignore
+            out_channels=n_classes,
+            kernel_size=3,
+            padding=1,
+        ).to(device=device, dtype=dtype)  # type: ignore
+
+        self._config["n_classes"] = n_classes
+
     def count_parameters(self, trainable_only: bool = False) -> int:
         return sum(p.numel() for p in self.parameters() if p.requires_grad) \
             if trainable_only \

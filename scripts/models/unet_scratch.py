@@ -2,6 +2,7 @@
 
 import torch
 from typing import Literal
+from pathlib import Path
 
 from scripts.models.model import Model
 
@@ -39,6 +40,12 @@ class ConvReLU(torch.nn.Module):
     def forward(self, x):
         return self.seq(x)
 
+    # @staticmethod
+    # def load(config_path: str | Path, weights_path: str | Path) -> "UNet":
+    #     unet = Model.load(config_path, weights_path)
+    #     assert isinstance(unet, UNet)
+    #     return unet
+    
     def get_num_groups(self, in_ch: int) -> int:
         for g in [8, 4, 2]:
             if in_ch % g == 0:

@@ -7,7 +7,7 @@ import json
 
 from scripts.train.loss import FocalTverskyLoss, calc_class_weights
 from scripts.train.train import run_loop
-from scripts.models.unet import UNet
+from scripts.models.unet_scratch import UNet
 from scripts.dataset import DatasetTreeAI, make_base_train_augmentations, make_base_test_augmentations
 
 # %%

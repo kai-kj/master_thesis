@@ -3,6 +3,7 @@
 from typing import Literal
 import torch
 from transformers import SegformerForSemanticSegmentation, SegformerConfig, logging as transformer_logging
+from pathlib import Path
 
 from scripts.models.model import Model
 
@@ -62,6 +63,25 @@ class SegFormer(Model):
 
         return torch.nn.functional.softmax(logits, dim=1) if self.apply_softmax else logits
 
+    @staticmethod
+    def load(config_path: str | Path, weights_path: str | Path) -> "SegFormer":
+        segformer = Model.load(config_path, weights_path)
+        assert isinstance(segformer, SegFormer)
+        return segformer
+
+    def change_n_classes(self, n_classes: int):
+        head = self.model.decode_head  # type: ignore
+        device = head.classifier.weight.device
+        dtype = head.classifier.weight.dtype
+
+        head.classifier = torch.nn.Conv2d(
+            in_channels=head.classifier.in_channels,
+            out_channels=n_classes,
+            kernel_size=1
+        ).to(device=device, dtype=dtype)
+
+        self._config["n_classes"] = n_classes
+
     def get_encoder_modules(self) -> list[torch.nn.Module]:
         return [self.model.segformer]  # type: ignore
 
@@ -73,20 +93,6 @@ class SegFormer(Model):
 
     def get_decoder_parameters(self) -> list[torch.nn.parameter.Parameter]:
         return [p for m in self.get_decoder_modules() for p in m.parameters()]
-
-    def change_n_classes(self, n_classes: int):
-        head = self.model.decode_head  # type: ignore
-
-        device = head.classifier.weight.device
-        dtype = head.classifier.weight.dtype
-
-        head.classifier = torch.nn.Conv2d(
-            in_channels=head.classifier.in_channels,
-            out_channels=n_classes,
-            kernel_size=1
-        ).to(device=device, dtype=dtype)
-
-        self._config["n_classes"] = n_classes
 
 
 # %%
