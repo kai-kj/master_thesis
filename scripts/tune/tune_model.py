@@ -3,34 +3,36 @@
 from pathlib import Path
 import time
 import torch
-import json
 
 from scripts.train.loss import FocalTverskyLoss
 from scripts.train.train import run_loop
-from scripts.dataset import DatasetTreeAI, make_base_train_augmentations, make_base_test_augmentations
+from scripts.dataset import DatasetTreeAI, make_base_train_augmentations_weak, make_base_test_augmentations
 
 # %%
-
-model_path = Path("models/segformer_20260531_104250")
-assert model_path.is_dir()
 
 device = torch.device("cuda")
-dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
 
 # %%
 
-for dist_name in ["china", "czechia", "iran", "mexico", "russia", "south_africa"]:
+for dist_name in ["china", "czechia", "iran", "mexico", "russia"]:
+    # for dist_name in ["china", "czechia", "iran", "mexico", "russia", "south_africa"]:
+    # for dist_name in ["south_africa"]:
+
     sa = dist_name == "south_africa"
     mix_ratio = 1.0 if not sa else 0.0
 
-    for k in [5, 10, 25, 50, 100]:
-        print(f"==== TRAIN {dist_name} - {k} shot ====")
+    for k in [1, 5, 25, 125]:
+        # for k in [125]:
 
-        dataset_train, dataset_valid = DatasetTreeAI(f"OOD_{dist_name}", "train", 0, dist_name == "south_africa") \
-            .split(0.2, make_base_train_augmentations(), make_base_test_augmentations(), 42)
+        print(f"==== training {dist_name} - {k} shot ====")
 
-        dataset_train_extra, _ = DatasetTreeAI(f"ID", "train", 0) \
-            .split(0.2, make_base_train_augmentations(), make_base_test_augmentations(), 42)
+        dataset_train, dataset_valid = DatasetTreeAI(
+            f"OOD_{dist_name}", "train", 0, dist_name == "south_africa", return_clim=True, return_soil=False
+        ).split(0.2, make_base_train_augmentations_weak(), make_base_test_augmentations(), 42)
+
+        dataset_train_extra, _ = DatasetTreeAI(
+            f"ID", "train", 0, dist_name == "south_africa", return_clim=True, return_soil=False
+        ).split(0.2, make_base_train_augmentations_weak(), make_base_test_augmentations(), 42)
 
         if k > len(dataset_train):
             print("not enough data, skipping")
@@ -40,38 +42,42 @@ for dist_name in ["china", "czechia", "iran", "mexico", "russia", "south_africa"
 
         from scripts.models.unet_res import UNetRes
 
-        model = UNetRes(len(dataset_stats["y_counts"]), "resnet34").to(device)
-        num_epochs = 25 if not sa else 50
+        model_path = Path("models/unet_fusion_clim_20260621_102339")
+        model = UNetRes.load(model_path / "model.json", model_path / "model.pt").to(device)
+        num_epochs = 50 if not sa else 75
         batch_size = 16
-        lr_min = 1e-7 if not sa else 5e-7
+        lr_min = 1e-6 if not sa else 5e-6
 
         optimizer = torch.optim.AdamW([
-            {"params": model.get_encoder_parameters(), "lr": 1e-6 if not sa else 5e-6},
-            {"params": model.get_decoder_parameters(), "lr": 1e-5 if not sa else 5e-5},
-            {"params": model.get_head_parameters(), "lr": 1e-5 if not sa else 5e-5},
+            {"params": model.get_encoder_parameters(), "lr": 1e-5 if not sa else 5e-5},
+            {"params": model.get_decoder_parameters(), "lr": 1e-4 if not sa else 5e-4},
+            {"params": model.get_head_parameters(), "lr": 1e-4 if not sa else 5e-4},
         ])
 
         # ---- deeplab ----
 
         # from scripts.models.deeplab import DeepLabV3Plus
         #
-        # model = DeepLabV3Plus(len(dataset_stats["y_counts"]), "resnet34").to(device)
-        # num_epochs = 25 if not sa else 50
+        # model_path = Path("models/deeplab_20260612_135725")
+        # model = DeepLabV3Plus.load(model_path / "model.json", model_path / "model.pt").to(device)
+        #
+        # num_epochs = 50
         # batch_size = 16
-        # lr_min = 1e-7 if not sa else 5e-7
+        # lr_min = 1e-6
         #
         # optimizer = torch.optim.AdamW([
-        #     {"params": model.get_encoder_parameters(), "lr": 1e-6 if not sa else 5e-6},
-        #     {"params": model.get_decoder_parameters(), "lr": 1e-5 if not sa else 5e-5},
-        #     {"params": model.get_head_parameters(), "lr": 1e-5 if not sa else 5e-5},
+        #     {"params": model.get_encoder_parameters(), "lr": 1e-5},
+        #     {"params": model.get_decoder_parameters(), "lr": 1e-4},
+        #     {"params": model.get_head_parameters(), "lr": 1e-4},
         # ])
 
         # ---- segformer ----
 
         # from scripts.models.segformer import SegFormer
         #
-        # model = SegFormer(len(dataset_stats["y_counts"]), variant="b2").to(device)
-        # num_epochs = 25 if not sa else 50
+        # model_path = Path("models/segformer_20260612_145904")
+        # model = SegFormer.load(model_path / "model.json", model_path / "model.pt").to(device)
+        # num_epochs = 50
         # batch_size = 4
         # lr_min = 1e-7 if not sa else 5e-7
         #
@@ -84,8 +90,9 @@ for dist_name in ["china", "czechia", "iran", "mexico", "russia", "south_africa"
 
         # from scripts.models.transunet import TransUNet
         #
-        # model = TransUNet(len(dataset_stats["y_counts"]), variant="b16").to(device)
-        # num_epochs = 25 if not sa else 50
+        # model_path = Path("models/transunet_20260612_170208")
+        # model = TransUNet.load(model_path / "model.json", model_path / "model.pt").to(device)
+        # num_epochs = 50
         # batch_size = 2
         # lr_min = 1e-7 if not sa else 5e-7
         #
@@ -99,8 +106,9 @@ for dist_name in ["china", "czechia", "iran", "mexico", "russia", "south_africa"
 
         # from scripts.models.swin_fpn import SwinFPN
         #
-        # model = SwinFPN(len(dataset_stats["y_counts"]), variant="b").to(device)
-        # num_epochs = 25 if not sa else 50
+        # model_path = Path("models/swin_20260612_203922")
+        # model = SwinFPN.load(model_path / "model.json", model_path / "model.pt").to(device)
+        # num_epochs = 50
         # batch_size = 4
         # lr_min = 1e-8 if not sa else 5e-8
         #
@@ -115,9 +123,11 @@ for dist_name in ["china", "czechia", "iran", "mexico", "russia", "south_africa"
         dataset_train.sample(k, random_state=42)
         dataset_train_extra.sample(int(len(dataset_train) * mix_ratio), random_state=42)
 
+        n_classes = 10 if not sa else 8
+
         if sa:
-            print("changing n_classes")
-            model.change_n_classes(len(dataset_stats["y_counts"]))
+            print(f"changing n_classes to {n_classes}")
+            model.change_n_classes(n_classes)
 
         run_loop(
             device, model, optimizer,
@@ -127,6 +137,6 @@ for dist_name in ["china", "czechia", "iran", "mexico", "russia", "south_africa"
             dataset_train.loader(batch_size, others=[dataset_train_extra]),
             dataset_valid.loader(batch_size),
             f"{model_path.as_posix()}_{dist_name}_{k}_shot_{time.strftime("%Y%m%d_%H%M%S")}",
-            len(dataset_stats["y_counts"]),
+            n_classes,
             silent=True,
         )

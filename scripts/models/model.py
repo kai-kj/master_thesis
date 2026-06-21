@@ -9,7 +9,7 @@ class Model(torch.nn.Module):
         self._config = dict()
         super().__init__()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, x_fusion: torch.Tensor | None = None) -> torch.Tensor:
         raise NotImplementedError
 
     @staticmethod
@@ -20,10 +20,19 @@ class Model(torch.nn.Module):
         config = json.loads(config_path.read_text())
         weights = torch.load(weights_path, weights_only=True)
 
+        if "fusion" not in config:
+            config["fusion"] = None
+
         match config["name"]:
-            case "UNet":
-                from scripts.models.unet_scratch import UNet
-                model = UNet(**{**config, "get_weights": False})
+            case "UNetRes":
+                from scripts.models.unet_res import UNetRes
+                model = UNetRes(**{**config, "get_weights": False})
+                model.load_state_dict(weights)
+                return model
+
+            case "DeepLabV3Plus":
+                from scripts.models.deeplab import DeepLabV3Plus
+                model = DeepLabV3Plus(**{**config, "get_weights": False})
                 model.load_state_dict(weights)
                 return model
 
@@ -36,12 +45,6 @@ class Model(torch.nn.Module):
             case "TransUNet":
                 from scripts.models.transunet import TransUNet
                 model = TransUNet(**{**config, "get_weights": False})
-                model.load_state_dict(weights)
-                return model
-
-            case "SwinUPerNet":
-                from scripts.models.swin_upernet import SwinUPerNet
-                model = SwinUPerNet(**{**config, "get_weights": False})
                 model.load_state_dict(weights)
                 return model
 

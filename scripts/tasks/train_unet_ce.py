@@ -8,7 +8,7 @@ import json
 from scripts.train.loss import calc_class_weights
 from scripts.train.train import run_loop
 from scripts.models.unet_scratch import UNet
-from scripts.dataset import DatasetTreeAI, make_base_train_augmentations, make_base_test_augmentations
+from scripts.dataset import DatasetTreeAI, make_base_train_augmentations_strong, make_base_test_augmentations
 
 # %%
 
@@ -21,7 +21,7 @@ dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
 
 dataset_train, dataset_valid = DatasetTreeAI("ID", "train", 0).split(
     0.2,
-    train_augmentations=make_base_train_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
+    train_augmentations=make_base_train_augmentations_strong(dataset_stats["x_mean"], dataset_stats["x_std"]),
     test_augmentations=make_base_test_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
     random_state=42,
 )

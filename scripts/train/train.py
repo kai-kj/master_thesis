@@ -20,16 +20,17 @@ def run_batch_train(
         optimizer: torch.optim.Optimizer,
         loss_fn: torch.nn.Module,
         x: torch.Tensor,
+        x_fusion: torch.Tensor,
         y_true: torch.Tensor,
         return_y: bool = False,
 ) -> tuple[float, np.ndarray | None, np.ndarray | None]:
     model.train()
     optimizer.zero_grad()
 
-    x, y_true = x.to(device), y_true.to(device).squeeze(1)
+    x, x_fusion, y_true = x.to(device), x_fusion.to(device), y_true.to(device).squeeze(1)
 
     with torch.amp.autocast_mode.autocast(device_type=device.type):
-        y_pred = model(x)
+        y_pred = model(x, x_fusion)
         y_loss = loss_fn(y_pred, y_true)
 
     scaler.scale(y_loss).backward()
@@ -47,15 +48,16 @@ def run_batch_test(
         model: torch.nn.Module,
         loss_fn: torch.nn.Module,
         x: torch.Tensor,
+        x_fusion: torch.Tensor,
         y_true: torch.Tensor,
         return_y: bool = False,
 ) -> tuple[float, np.ndarray | None, np.ndarray | None]:
     model.eval()
 
-    x, y_true = x.to(device), y_true.to(device).squeeze(1)
+    x, x_fusion, y_true = x.to(device), x_fusion.to(device), y_true.to(device).squeeze(1)
 
     with torch.inference_mode(), torch.amp.autocast_mode.autocast(device_type=device.type):
-        y_pred = model(x)
+        y_pred = model(x, x_fusion)
         y_loss = loss_fn(y_pred, y_true)
 
     if return_y:
@@ -82,8 +84,11 @@ def run_epoch(
     train_loss = []
     valid_loss = []
 
-    for batch_x, batch_y in tqdm(dl_train, total=len(dl_train), colour="white", desc="  train", disable=silent):
-        loss, _, _ = run_batch_train(device, scaler, model, optimizer, loss_fn, batch_x, batch_y)
+    for batch in tqdm(dl_train, total=len(dl_train), colour="white", desc="  train", disable=silent):
+        loss, _, _ = run_batch_train(
+            device, scaler, model, optimizer, loss_fn,
+            batch[0], batch[1], batch[2]
+        )
         train_loss.append(loss)
 
     gc.collect()
@@ -91,8 +96,12 @@ def run_epoch(
     y_pred_all = []
     y_true_all = []
 
-    for batch_x, batch_y in tqdm(dl_valid, total=len(dl_valid), colour="white", desc="  valid", disable=silent):
-        loss, y_true, y_pred = run_batch_test(device, model, loss_fn, batch_x, batch_y, return_y=calc_confusion)
+    for batch in tqdm(dl_valid, total=len(dl_valid), colour="white", desc="  valid", disable=silent):
+        loss, y_true, y_pred = run_batch_test(
+            device, model, loss_fn,
+            batch[0], batch[1], batch[2],
+            return_y=calc_confusion
+        )
         valid_loss.append(loss)
         y_true_all.append(y_true)
         y_pred_all.append(y_pred)
@@ -157,7 +166,6 @@ def run_loop(
         history.append((epoch, curr_lr, curr_train_loss, curr_valid_loss, *confusion_matrix))
 
         if not silent:
-            #     print(f"  lr:         {history[-1][1]:.6f}")
             print(f"  loss: {history[-1][2]:.6f} (train), {history[-1][3]:.6f} (valid)")
 
         if len(history) == 1 or history[-1][3] < np.min([h[3] for h in history[:-1]]):

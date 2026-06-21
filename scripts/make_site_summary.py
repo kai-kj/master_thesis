@@ -1,21 +1,17 @@
 # %%
 
-from pathlib import Path
 import matplotlib.pyplot as plt
-import json
 
 from scripts.dataset import DatasetTreeAI
 
 # %%
-
-dataset_stats_path = Path("data/dataset_stats_detailed.json")
 
 dataset_names = {
     "ID": "Core data",
     "OOD_china": "China data",
     "OOD_czechia": "Czechia data",
     "OOD_iran": "Iran data",
-    "OOD_mexico": "China data",
+    "OOD_mexico": "Mexico data",
     "OOD_russia": "Russia data",
     "OOD_south_africa": "South Africa data",
 }
@@ -39,9 +35,6 @@ for dataset_name in dataset_names.keys():
         "train_size": len(dataset_train),
         "test_size": len(dataset_test),
     }
-
-dataset_stats_path.parent.mkdir(parents=True, exist_ok=True)
-dataset_stats_path.write_text(json.dumps(dataset_stats, indent=4))
 
 # %%
 

@@ -3,8 +3,10 @@
 import torch
 from typing import Literal
 import segmentation_models_pytorch as smp
+from pathlib import Path
 
 from scripts.models.model import Model
+from dependencies.clim_soil_encoder.model import MLPEncoder
 
 
 # %%
@@ -17,6 +19,7 @@ class UNetRes(Model):
             variant: Literal["resnet18", "resnet34", "resnet50", "resnet101"] = "resnet34",
             apply_softmax: bool = False,
             get_weights: bool = True,
+            fusion: dict | None = None,
             **kwargs
     ):
         super().__init__()
@@ -26,6 +29,7 @@ class UNetRes(Model):
             "n_classes": n_classes,
             "variant": variant,
             "apply_softmax": apply_softmax,
+            "fusion": fusion,
         }
 
         self.model = smp.Unet(
@@ -37,9 +41,51 @@ class UNetRes(Model):
 
         self.apply_softmax = apply_softmax
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        logits = self.model(x)
+        self.fusion_encoder: None | MLPEncoder = None
+        self.fusion_projector: None | torch.nn.Linear = None
+        self.fusion_fuser: None | torch.nn.Sequential = None
+
+        if fusion is not None:
+            self.add_fusion_encoder(MLPEncoder(**fusion))
+
+    def forward(self, x: torch.Tensor, x_fusion: torch.Tensor | None = None) -> torch.Tensor:
+        image_features = self.model.encoder(x)
+
+        if self.fusion_encoder is not None:
+            assert self.fusion_projector is not None
+            assert self.fusion_fuser is not None
+            assert x_fusion is not None
+
+            fusion_features = self.fusion_projector(self.fusion_encoder(x_fusion))
+            fusion_features = fusion_features[:, :, None, None]
+            fusion_features = fusion_features.expand(-1, -1, image_features[-1].shape[2], image_features[-1].shape[3])
+
+            image_features[-1] = self.fusion_fuser(torch.cat([image_features[-1], fusion_features], dim=1))
+
+        logits = self.model.segmentation_head(self.model.decoder(image_features))
+
         return torch.nn.functional.softmax(logits, dim=1) if self.apply_softmax else logits
+
+    def add_fusion_encoder(self, fusion_encoder: MLPEncoder, device=None):
+        self.fusion_encoder = fusion_encoder.to(device)
+
+        n_image_encoder_features: int = self.model.encoder.out_channels[-1]
+        n_fusion_encoder_features: int = self.fusion_encoder.net[-2].out_features  # type: ignore
+
+        self.fusion_projector = torch.nn.Linear(n_fusion_encoder_features, n_image_encoder_features).to(device)
+
+        self.fusion_fuser = torch.nn.Sequential(
+            torch.nn.Conv2d(n_image_encoder_features * 2, n_image_encoder_features, kernel_size=1),
+            torch.nn.ReLU(inplace=True),
+        ).to(device)
+
+        self._config["fusion"] = self.fusion_encoder._config  # type: ignore
+
+    @staticmethod
+    def load(config_path: str | Path, weights_path: str | Path) -> "UNetRes":
+        unet = Model.load(config_path, weights_path)
+        assert unet._name == "UNetRes"
+        return unet  # type: ignore
 
     def get_encoder_modules(self) -> list[torch.nn.Module]:
         return [self.model.encoder]
@@ -50,6 +96,15 @@ class UNetRes(Model):
     def get_head_modules(self) -> list[torch.nn.Module]:
         return [self.model.segmentation_head]
 
+    def get_fusion_encoder_modules(self) -> list[torch.nn.Module]:
+        assert self.fusion_encoder is not None
+        return [self.fusion_encoder]
+
+    def get_fusion_modules(self) -> list[torch.nn.Module]:
+        assert self.fusion_projector is not None
+        assert self.fusion_fuser is not None
+        return [self.fusion_projector, self.fusion_fuser]
+
     def get_encoder_parameters(self) -> list[torch.nn.parameter.Parameter]:
         return [p for m in self.get_encoder_modules() for p in m.parameters()]
 
@@ -58,6 +113,12 @@ class UNetRes(Model):
 
     def get_head_parameters(self) -> list[torch.nn.parameter.Parameter]:
         return [p for m in self.get_head_modules() for p in m.parameters()]
+
+    def get_fusion_encoder_parameters(self) -> list[torch.nn.parameter.Parameter]:
+        return [p for m in self.get_fusion_encoder_modules() for p in m.parameters()]
+
+    def get_fusion_parameters(self) -> list[torch.nn.parameter.Parameter]:
+        return [p for m in self.get_fusion_modules() for p in m.parameters()]
 
     def change_n_classes(self, n_classes: int):
         head = self.model.segmentation_head
@@ -69,6 +130,7 @@ class UNetRes(Model):
             out_channels=n_classes,
             kernel_size=head[0].kernel_size,  # type: ignore
             stride=head[0].stride,  # type: ignore
+            padding=head[0].padding,  # type: ignore
         ).to(device=device, dtype=dtype)  # type: ignore
 
         self._config["n_classes"] = n_classes
@@ -96,3 +158,41 @@ if __name__ == "__main__":
     print(f"after change_n_classes,")
     print(f"- in  shape: {next(iter(dataloader))[0].shape}")
     print(f"- out shape: {model(next(iter(dataloader))[0]).shape}")
+
+# %%
+
+if __name__ == "__main__":
+    from scripts.dataset import DatasetTreeAI
+    from dependencies.clim_soil_encoder.dataset import DatasetClimateSoil
+
+    dataset_image = DatasetTreeAI("ID", "train", 0)
+    dataloader_image = torch.utils.data.DataLoader(dataset_image, batch_size=1, shuffle=True)
+
+    dataset_fusion = DatasetClimateSoil("train", 0, include_clim=True)
+    dataloader_fusion = torch.utils.data.DataLoader(dataset_fusion, batch_size=1, shuffle=True)
+
+    model = UNetRes(len(dataset_image.label_id_to_name))
+
+    fusion_encoder = MLPEncoder(8, 64)
+    model.add_fusion_encoder(fusion_encoder, "cpu")
+
+    model.eval()
+
+    print(f"parameter count: {model.count_parameters() / 1000000:.2f}M")
+
+    print(f"before change_n_classes,")
+    print(f"- in  shape: {next(iter(dataloader_image))[0].shape}, {next(iter(dataloader_fusion))[0].shape}")
+    print(f"- out shape: {model(next(iter(dataloader_image))[0], next(iter(dataloader_fusion))[0]).shape}")
+
+    model.change_n_classes(8)
+
+    print(f"after change_n_classes,")
+    print(f"- in  shape: {next(iter(dataloader_image))[0].shape}, {next(iter(dataloader_fusion))[0].shape}")
+    print(f"- out shape: {model(next(iter(dataloader_image))[0], next(iter(dataloader_fusion))[0]).shape}")
+
+# %%
+
+if __name__ == "__main__":
+    # model = UNetRes.load("tmp/unet_fusion.json", "tmp/unet_fusion.pt")
+
+    model = UNetRes.load("tmp/unet.json", "tmp/unet.pt")

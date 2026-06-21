@@ -8,7 +8,7 @@ import json
 from scripts.train.loss import FocalTverskyLoss
 from scripts.train.train import run_loop
 from scripts.models.deeplab import DeepLabV3Plus
-from scripts.dataset import DatasetTreeAI, make_base_train_augmentations, make_base_test_augmentations
+from scripts.dataset import DatasetTreeAI, make_base_train_augmentations_strong, make_base_test_augmentations
 
 # %%
 
@@ -21,7 +21,7 @@ dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
 
 dataset_train, dataset_valid = DatasetTreeAI("ID", "train", 0).split(
     0.2,
-    train_augmentations=make_base_train_augmentations((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+    train_augmentations=make_base_train_augmentations_strong((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     test_augmentations=make_base_test_augmentations((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     random_state=42,
 )

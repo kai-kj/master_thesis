@@ -8,7 +8,7 @@ import json
 from scripts.train.loss import FocalTverskyLoss, calc_class_weights
 from scripts.train.train import run_loop
 from scripts.models.unet_scratch import UNet
-from scripts.dataset import DatasetTreeAI, make_base_train_augmentations, make_base_test_augmentations
+from scripts.dataset import DatasetTreeAI, make_base_train_augmentations_strong, make_base_test_augmentations
 
 # %%
 
@@ -26,14 +26,14 @@ for dist_name in ["china", "czechia", "iran", "mexico", "russia", "south_africa"
 
     dataset_train, dataset_valid = DatasetTreeAI(f"OOD_{dist_name}", "train", 0, dist_name == "south_africa").split(
         0.2,
-        train_augmentations=make_base_train_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
+        train_augmentations=make_base_train_augmentations_strong(dataset_stats["x_mean"], dataset_stats["x_std"]),
         test_augmentations=make_base_test_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
         random_state=42,
     )
 
     dataset_train_extra, _ = DatasetTreeAI(f"ID", "train", 0).split(
         0.2,
-        train_augmentations=make_base_train_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
+        train_augmentations=make_base_train_augmentations_strong(dataset_stats["x_mean"], dataset_stats["x_std"]),
         test_augmentations=make_base_test_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
         random_state=42,
     )

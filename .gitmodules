@@ -7,3 +7,6 @@
 [submodule "dependencies/TransUNet"]
 	path = dependencies/TransUNet
 	url = https://github.com/Beckschen/TransUNet.git
+[submodule "dependencies/clim_soil_encoder"]
+	path = dependencies/clim_soil_encoder
+	url = git@gitlab.ethz.ch:kkitagawa/clim_soil_encoder.git

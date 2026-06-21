@@ -13,6 +13,7 @@ import torch
 import numpy as np
 import geopandas as gpd
 import cv2
+from fsspec.implementations import data
 
 from dependencies.treeai_segmentation.treeai_segmentation import TreeAISegmentation
 
@@ -30,6 +31,8 @@ class DatasetTreeAI(torch.utils.data.Dataset):
             dist: str, train_or_test: str, split_n: int,
             use_africa_labels: bool = False,
             indices: None | list[int] = None,
+            return_clim: bool = False,
+            return_soil: bool = False,
             augmentations: A.Compose | None = None,
     ):
         super(DatasetTreeAI, self).__init__()
@@ -44,19 +47,40 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
         # for when calling .split()
         self._config = {
-            "dist": dist, "train_or_test": train_or_test, "split_n": split_n, "use_africa_labels": use_africa_labels
+            "dist": dist, "train_or_test": train_or_test, "split_n": split_n,
+            "use_africa_labels": use_africa_labels, "return_clim": return_clim, "return_soil": return_soil,
         }
 
         self._treeai = TreeAISegmentation(self.TREEAI_SEGMENTATION_PATH)
 
-        self._patches = self._treeai.get_patches_512x512_ext() \
+        clim_patches = self._treeai.get_fusion_patches("512", "clim")
+        soil_patches = self._treeai.get_fusion_patches("512", "soil")
+
+        assert (self.TREEAI_SEGMENTATION_PATH / "clim_soil_stats.json").exists()
+        clim_soil_stats = json.loads((self.TREEAI_SEGMENTATION_PATH / "clim_soil_stats.json").read_text())
+
+        self._fusion_columns \
+            = list(clim_patches.columns)[2:-1] * return_clim + list(soil_patches.columns)[2:-1] * return_soil
+
+        self._fusion_mean = np \
+            .array(clim_soil_stats["clim_mean"] * return_clim + clim_soil_stats["soil_mean"] * return_soil) \
+            .astype(np.float64)
+
+        self._fusion_std = np. \
+            array(clim_soil_stats["clim_std"] * return_clim + clim_soil_stats["soil_std"] * return_soil) \
+            .astype(np.float64)
+
+        self._patches = self._treeai.get_patches_ext("512") \
             .merge(gpd.read_file(self.SITE_SPLIT_PATH)[["site_id", "dist"]], on="site_id") \
-            .drop(columns=["geometry"])
+            .merge(clim_patches, on="subpatch_name") \
+            .merge(soil_patches, on="subpatch_name")
 
         self._patches = self._patches[self._patches["dist"] == dist]
         self._patches = self._patches[self._patches[f"split_{split_n}"] == train_or_test]
 
-        self._patches = self._patches[["site_id", "crop_x0", "crop_x1", "crop_y0", "crop_y1", "path_x", "path_y"]]
+        patches_columns = ["site_id", "crop_x0", "crop_x1", "crop_y0", "crop_y1", "path_x", "path_y"]
+
+        self._patches = self._patches[patches_columns + self._fusion_columns]
 
         if indices is not None:
             self._patches = self._patches.iloc[indices]
@@ -74,6 +98,9 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
         self.label_id_to_name = {int(r["model_label_id"]): str(r["model_label_name"]) for _, r in labels_map.iterrows()}
         self.label_name_to_id = {str(r["model_label_name"]): int(r["model_label_id"]) for _, r in labels_map.iterrows()}
+
+        assert (self.TREEAI_SEGMENTATION_PATH / "clim_soil_stats.json").exists()
+        self._clim_soil_stats = json.loads((self.TREEAI_SEGMENTATION_PATH / "clim_soil_stats.json").read_text())
 
     def sample(self, n: int, replace: bool = False, random_state: int | None = None):
         self._patches = self._patches.sample(n, replace=replace, random_state=random_state)
@@ -116,7 +143,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         y_counts = np.zeros(len(self.label_id_to_name), dtype=np.int64)
 
         for i in range(len(self)):
-            x, y = self[i]
+            x, _, y = self[i]
             x, y = x.numpy(), y.numpy()
 
             n_pixels += x.shape[1] * x.shape[2]
@@ -130,7 +157,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
         return x_mean, x_std, label_counts  # type: ignore
 
-    def get_xy(self, idx, apply_augmentations: bool = True) -> tuple[torch.Tensor, torch.Tensor]:
+    def get_xy(self, idx, apply_augmentations: bool = True) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         row = self._patches.iloc[idx]
 
         x_array: np.ndarray = cv2.cvtColor(cv2.imread(row["path_x"]), cv2.COLOR_BGR2RGB)  # type: ignore
@@ -146,19 +173,22 @@ class DatasetTreeAI(torch.utils.data.Dataset):
             x_array = augmented["image"]
             y_array = augmented["mask"]
 
+        x_fusion_array: np.ndarray = row[self._fusion_columns].to_numpy(dtype=np.float64)
+
         x_tensor = torch.Tensor(x_array).permute(2, 0, 1)
         y_tensor = self._labels_lut[torch.Tensor(y_array).long()]
+        x_fusion_tensor = torch.Tensor((x_fusion_array - self._fusion_mean) / self._fusion_std)
 
-        return x_tensor, y_tensor
+        return x_tensor, x_fusion_tensor, y_tensor
 
     def __len__(self):
         return len(self._patches)
 
-    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         return self.get_xy(idx, apply_augmentations=True)
 
 
-def make_base_train_augmentations(
+def make_base_train_augmentations_strong(
         x_mean: tuple[float, float, float] = (0.485, 0.456, 0.406),
         x_std: tuple[float, float, float] = (0.229, 0.224, 0.225),
 ) -> A.Compose:
@@ -169,9 +199,28 @@ def make_base_train_augmentations(
         A.Rotate(limit=(-90.0, 90.0), p=1.0),
 
         # Sensor
-        A.RandomBrightnessContrast(brightness_limit=(-0.1, 0.1), contrast_limit=(-0.1, 0.1), p=0.5),
-        A.HueSaturationValue(hue_shift_limit=(-10, 10), sat_shift_limit=(-10, 10), val_shift_limit=(-10, 10), p=0.5),
+        A.RandomBrightnessContrast((-0.1, 0.1), (-0.1, 0.1), p=0.5),
+        A.HueSaturationValue((-10, 10), (-10, 10), (-10, 10), p=0.5),
         A.GaussianBlur(blur_limit=(3, 3), p=0.125),
+
+        # Norm
+        A.Normalize(mean=x_mean, std=x_std, max_pixel_value=1.0, p=1.0),
+    ])
+
+
+def make_base_train_augmentations_weak(
+        x_mean: tuple[float, float, float] = (0.485, 0.456, 0.406),
+        x_std: tuple[float, float, float] = (0.229, 0.224, 0.225),
+) -> A.Compose:
+    return A.Compose([
+        # Geometric
+        A.HorizontalFlip(p=0.5),
+        A.VerticalFlip(p=0.5),
+        A.Rotate(limit=(-90.0, 90.0), p=1.0),
+
+        # Sensor
+        A.RandomBrightnessContrast((-0.025, 0.025), (-0.05, 0.05), p=0.5),
+        A.HueSaturationValue((-2.5, 2.5), (-2.5, 2.5), (-2.5, 2.5), p=0.5),
 
         # Norm
         A.Normalize(mean=x_mean, std=x_std, max_pixel_value=1.0, p=1.0),
@@ -190,69 +239,74 @@ def make_base_test_augmentations(
 # %%
 
 if __name__ == "__main__":
-    dataset = DatasetTreeAI("ID", "train", 0)
-    dataset_stats = dataset.calc_stats()
-
-    fig, ax = plt.subplots()
-    ax.bar(range(len(dataset_stats[2])), list(dataset_stats[2].values()))
-    ax.set_xticks(range(len(dataset_stats[2])), labels=dataset_stats[2].keys(), rotation=90)
-    ax.set_ylabel("class occurrences")
-    ax.spines[["right", "top"]].set_visible(False)
-    fig.tight_layout()
-    fig.show()
-
-    dataset_stats = {
-        "x_mean": list(dataset_stats[0]),
-        "x_std": list(dataset_stats[1]),
-        "y_counts": dataset_stats[2],
-    }
-
-    Path("data/dataset_stats.json").write_text(json.dumps(dataset_stats, indent=4))
+    dataset = DatasetTreeAI("ID", "train", 0, return_clim=True)
 
 # %%
 
-if __name__ == "__main__":
-    dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
+# if __name__ == "__main__":
+#     dataset = DatasetTreeAI("ID", "train", 0)
+#     dataset_stats = dataset.calc_stats()
+#
+#     fig, ax = plt.subplots()
+#     ax.bar(range(len(dataset_stats[2])), list(dataset_stats[2].values()))
+#     ax.set_xticks(range(len(dataset_stats[2])), labels=dataset_stats[2].keys(), rotation=90)
+#     ax.set_ylabel("class occurrences")
+#     ax.spines[["right", "top"]].set_visible(False)
+#     fig.tight_layout()
+#     fig.show()
+#
+#     dataset_stats = {
+#         "x_mean": list(dataset_stats[0]),
+#         "x_std": list(dataset_stats[1]),
+#         "y_counts": dataset_stats[2],
+#     }
+#
+#     Path("data/dataset_stats.json").write_text(json.dumps(dataset_stats, indent=4))
 
-    dataset_train, dataset_test = DatasetTreeAI("ID", "train", 0).split(
-        0.2,
-        train_augmentations=make_base_train_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
-        test_augmentations=make_base_test_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
-        random_state=42,
-    )
+# %%
 
-    n_samples = 5
-    fig, ax = plt.subplots(4, n_samples, figsize=(n_samples * 4, 4 * 4))
-
-    for i in range(n_samples):
-        index_train = random.randint(0, len(dataset_train) - 1)
-        index_test = random.randint(0, len(dataset_test) - 1)
-
-        x_train, y_train = dataset_train[index_train]
-        x_test, y_test = dataset_test[index_test]
-
-        x_train = x_train.numpy().transpose(1, 2, 0)
-        y_train = y_train.numpy()
-
-        x_test = x_test.numpy().transpose(1, 2, 0)
-        y_test = y_test.numpy()
-
-        ax[0, i].set_title(f"train sample {index_train}")
-        ax[0, i].imshow((x_train - x_train.min()) / (x_train.max() - x_train.min()))
-        ax[0, i].axis("off")
-
-        ax[2, i].set_title(f"test sample {index_test}")
-        ax[2, i].imshow((x_test - x_test.min()) / (x_test.max() - x_test.min()))
-        ax[2, i].axis("off")
-
-        vmin = min(dataset_train.label_id_to_name.keys())
-        vmax = max(dataset_train.label_id_to_name.keys())
-
-        ax[1, i].imshow(y_train, vmin=vmin, vmax=vmax, cmap="viridis")
-        ax[1, i].axis("off")
-
-        ax[3, i].imshow(y_test, vmin=vmin, vmax=vmax, cmap="viridis")
-        ax[3, i].axis("off")
-
-    fig.tight_layout()
-    fig.show()
+# if __name__ == "__main__":
+#     dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
+#
+#     dataset_train, dataset_test = DatasetTreeAI("ID", "train", 0).split(
+#         0.2,
+#         train_augmentations=make_base_train_augmentations_strong(dataset_stats["x_mean"], dataset_stats["x_std"]),
+#         test_augmentations=make_base_test_augmentations(dataset_stats["x_mean"], dataset_stats["x_std"]),
+#         random_state=42,
+#     )
+#
+#     n_samples = 5
+#     fig, ax = plt.subplots(4, n_samples, figsize=(n_samples * 4, 4 * 4))
+#
+#     for i in range(n_samples):
+#         index_train = random.randint(0, len(dataset_train) - 1)
+#         index_test = random.randint(0, len(dataset_test) - 1)
+#
+#         x_train, y_train = dataset_train[index_train]
+#         x_test, y_test = dataset_test[index_test]
+#
+#         x_train = x_train.numpy().transpose(1, 2, 0)
+#         y_train = y_train.numpy()
+#
+#         x_test = x_test.numpy().transpose(1, 2, 0)
+#         y_test = y_test.numpy()
+#
+#         ax[0, i].set_title(f"train sample {index_train}")
+#         ax[0, i].imshow((x_train - x_train.min()) / (x_train.max() - x_train.min()))
+#         ax[0, i].axis("off")
+#
+#         ax[2, i].set_title(f"test sample {index_test}")
+#         ax[2, i].imshow((x_test - x_test.min()) / (x_test.max() - x_test.min()))
+#         ax[2, i].axis("off")
+#
+#         vmin = min(dataset_train.label_id_to_name.keys())
+#         vmax = max(dataset_train.label_id_to_name.keys())
+#
+#         ax[1, i].imshow(y_train, vmin=vmin, vmax=vmax, cmap="viridis")
+#         ax[1, i].axis("off")
+#
+#         ax[3, i].imshow(y_test, vmin=vmin, vmax=vmax, cmap="viridis")
+#         ax[3, i].axis("off")
+#
+#     fig.tight_layout()
+#     fig.show()

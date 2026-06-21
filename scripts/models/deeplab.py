@@ -3,6 +3,7 @@
 import torch
 from typing import Literal
 import segmentation_models_pytorch as smp
+from pathlib import Path
 
 from scripts.models.model import Model
 
@@ -40,6 +41,12 @@ class DeepLabV3Plus(Model):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         logits = self.model(x)
         return torch.nn.functional.softmax(logits, dim=1) if self.apply_softmax else logits
+
+    @staticmethod
+    def load(config_path: str | Path, weights_path: str | Path) -> "DeepLabV3Plus":
+        deeplab = Model.load(config_path, weights_path)
+        assert isinstance(deeplab, DeepLabV3Plus)
+        return deeplab
 
     def get_encoder_modules(self) -> list[torch.nn.Module]:
         return [self.model.encoder]
