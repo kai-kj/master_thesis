@@ -4,12 +4,13 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+from cycler import cycler
 
 # %%
 
 base_model_paths = [
     ("UNet", Path("models/unet_20260612_122705")),
-    ("UNet clim", Path("models/unet_20260612_122705")),
+    # ("UNet clim", Path("models/unet_20260612_122705")),
     ("DeepLabV3+", Path("models/deeplab_20260612_135725")),
     ("Segformer", Path("models/segformer_20260612_145904")),
     ("TransUNet", Path("models/transunet_20260612_170208")),
@@ -22,14 +23,18 @@ ks = [1, 5, 25, 125]
 
 # %%
 
-metric = "f1"
-agg = "macro"
+metric = "iou"
+agg = "weighted"
 
 results = []
 
 for base_mode_name, base_model_path in base_model_paths:
     result = pd.read_csv(base_model_path / f"metrics_id.csv").set_index("metric")
-    results.append([base_mode_name, "id", None, result.loc[agg, metric]])
+    results.append([base_mode_name, "id", 0, result.loc[agg, metric]])
+
+    for dist in dist_names:
+        result = pd.read_csv(base_model_path / f"metrics_{dist}.csv").set_index("metric")
+        results.append([base_mode_name, dist, 0, result.loc[agg, metric]])
 
     for dist in dist_names:
         for k in ks:
@@ -37,7 +42,6 @@ for base_mode_name, base_model_path in base_model_paths:
             model_path = list(base_model_path.parent.glob(f"{model_name}_*"))
 
             if len(model_path) > 0:
-                print(model_path)
                 result = pd.read_csv(model_path[0] / f"metrics_{dist}.csv").set_index("metric")
                 results.append([base_mode_name, dist, int(k), result.loc[agg, metric]])
 
@@ -49,8 +53,10 @@ fig, ax = plt.subplots()
 
 ax.bar(results.loc[results["dist"] == "id", "model"], results.loc[results["dist"] == "id", "score"])
 
+for i, (_, result) in enumerate(results.loc[results["dist"] == "id"].iterrows()):
+    ax.text(i, result["score"] + 0.025, f"{result["score"]:.2f}", horizontalalignment="center")
+
 # ax.set_ylim(0.75, 0.9)
-ax.set_xlabel("model")
 ax.set_ylabel(f"{agg} {metric} score")
 ax.spines[["top", "right"]].set_visible(False)
 
@@ -59,18 +65,34 @@ fig.show()
 
 # %% tuning
 
-fig, ax = plt.subplots()
+fig, ax = plt.subplots(figsize=(10, 5))
 
-for base_mode_name, base_model_path in base_model_paths:
-    result = results \
-        [results["dist"] == "czechia"] \
-        .loc[(results["model"] == base_mode_name) & (results["dist"] != "id"), ["k", "score"]] \
-        .groupby("k").mean()
+colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
-    ax.plot(result.index, result["score"], marker="o", label=base_mode_name)
+for i, k in enumerate([0] + ks):
+    ax.text(i * (len(base_model_paths) + 1) + 2, 1.0, f"k = {k}", horizontalalignment='center')
 
-ax.legend(loc="lower right", frameon=False)
-ax.set_xlabel("k")
+    for j, (base_mode_name, base_model_path) in enumerate(base_model_paths):
+        result = results.loc[(results["model"] == base_mode_name) & (results["k"] == k), "score"]
+
+        ax.boxplot(
+            result, positions=[i * (len(base_model_paths) + 1) + j],
+            widths=[0.75], showmeans=True,
+            medianprops={"color": "black"},
+            meanprops={"marker": "x", "markerfacecolor": "r", "markeredgecolor": "r"},
+            flierprops={"marker": ".", "markerfacecolor": "k", "markeredgecolor": "k"},
+
+        )
+
+# ax.legend(loc="lower right", frameon=False)
+# ax.set_xlabel("k")
+
+ax.set_xticks(
+    [i * (len(base_model_paths) + 1) + j for i in range(len(base_model_paths)) for j in range(len(ks) + 1)],
+    [m[0] for m in base_model_paths] * (len(ks) + 1),
+    rotation=90,
+)
+
 ax.set_ylabel(f"{agg} {metric} score")
 ax.spines[["top", "right"]].set_visible(False)
 

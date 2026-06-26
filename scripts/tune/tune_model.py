@@ -22,7 +22,6 @@ for dist_name in ["china", "czechia", "iran", "mexico", "russia"]:
     mix_ratio = 1.0 if not sa else 0.0
 
     for k in [1, 5, 25, 125]:
-        # for k in [125]:
 
         print(f"==== training {dist_name} - {k} shot ====")
 
@@ -42,7 +41,7 @@ for dist_name in ["china", "czechia", "iran", "mexico", "russia"]:
 
         from scripts.models.unet_res import UNetRes
 
-        model_path = Path("models/unet_fusion_clim_20260621_102339")
+        model_path = Path("models/unet_logit_fusion_clim_soil_20260623_115621")
         model = UNetRes.load(model_path / "model.json", model_path / "model.pt").to(device)
         num_epochs = 50 if not sa else 75
         batch_size = 16

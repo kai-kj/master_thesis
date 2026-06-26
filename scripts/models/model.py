@@ -2,12 +2,16 @@ import torch
 from pathlib import Path
 import json
 
+from dependencies.clim_soil_encoder.model import FusionEncoder
+
 
 class Model(torch.nn.Module):
     def __init__(self):
+        super().__init__()
+
         self._name = None
         self._config = dict()
-        super().__init__()
+        self.fusion_encoder: FusionEncoder | None = None
 
     def forward(self, x: torch.Tensor, x_fusion: torch.Tensor | None = None) -> torch.Tensor:
         raise NotImplementedError
@@ -20,8 +24,8 @@ class Model(torch.nn.Module):
         config = json.loads(config_path.read_text())
         weights = torch.load(weights_path, weights_only=True)
 
-        if "fusion" not in config:
-            config["fusion"] = None
+        if "fusion_encoder" in config:
+            config["fusion_encoder"] = FusionEncoder.from_config(config["fusion_encoder"])
 
         match config["name"]:
             case "UNetRes":
@@ -62,10 +66,15 @@ class Model(torch.nn.Module):
         config_path = Path(config_path)
         weights_path = Path(weights_path)
 
-        config = json.dumps({**self._config, "name": self._name}, indent=2)
+        config = {
+            "name": self._name,
+            **self._config,
+            "fusion_encoder": self.fusion_encoder.get_config() if self.fusion_encoder is not None else None,
+        }
+
         weights = self.state_dict()
 
-        config_path.write_text(config)
+        config_path.write_text(json.dumps(config, indent=4))
         torch.save(weights, weights_path)
 
     def change_n_classes(self, n_classes: int):

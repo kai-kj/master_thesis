@@ -19,7 +19,7 @@ from scripts.util.seed import seed
 
 def test_model(
         model_path: Path, dist_name: str, batch_size: int, device: str,
-        return_clim: bool, return_soil: bool,
+        return_clim: bool, return_soil: bool, randomize_fusion: bool,
         x_mean: tuple[float, float, float], x_std: tuple[float, float, float],
 ):
     print(f"testing {model_path.name} on {dist_name}")
@@ -30,7 +30,7 @@ def test_model(
 
     dataset_test = DatasetTreeAI(
         "ID" if dist_name == "ID" else f"OOD_{dist_name}", "test", 0, dist_name == "south_africa",
-        return_clim=return_clim, return_soil=return_soil,
+        return_clim=return_clim, return_soil=return_soil, randomize_fusion=randomize_fusion,
         augmentations=make_base_test_augmentations(x_mean, x_std),
     )
 
@@ -143,54 +143,55 @@ def test_model(
 
 def test_models(
         model_dists: list[tuple[Path, str]], batch_size: int, device: str,
-        return_clim: bool, return_soil: bool,
+        return_clim: bool, return_soil: bool, randomize_fusion: bool,
         x_mean: tuple[float, float, float], x_std: tuple[float, float, float],
 ):
     for model_path, dist_name in model_dists:
         test_model(
             model_path, dist_name, batch_size, device,
-            return_clim, return_soil, x_mean, x_std
+            return_clim, return_soil, randomize_fusion,
+            x_mean, x_std
         )
 
 
 # %%
 
-base_model_path = Path("models/unet_fusion_clim_20260621_102339")
-
-dists = ["china", "czechia", "iran", "mexico", "russia"]
-ks = [1, 5, 25, 125]
-
-configurations = [(base_model_path, "ID")]
-
-for dist in dists:
-    configurations.append((base_model_path, dist))
-
-    for k in ks:
-        ft_model_path_pattern = base_model_path.name + "_" + dist + "_" + str(k) + "_shot_*"
-        ft_model_path = sorted(list(base_model_path.parent.glob(ft_model_path_pattern)))
-
-        if len(ft_model_path) == 0: continue
-
-        ft_model_path = ft_model_path[0]
-
-        configurations.append((ft_model_path, dist))
-
-test_models(
-    configurations,
-    2, "cuda",
-    True, False,
-    (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),
-)
-
-# %%
-
-# test_model(
-#     Path("models/unet_fusion_clim_20260621_102339"),
-#     "ID",
+# base_model_path = Path("models/unet_fusion_clim_20260621_102339")
+#
+# dists = ["china", "czechia", "iran", "mexico", "russia"]
+# ks = [1, 5, 25, 125]
+#
+# configurations = [(base_model_path, "ID")]
+#
+# for dist in dists:
+#     configurations.append((base_model_path, dist))
+#
+#     for k in ks:
+#         ft_model_path_pattern = base_model_path.name + "_" + dist + "_" + str(k) + "_shot_*"
+#         ft_model_path = sorted(list(base_model_path.parent.glob(ft_model_path_pattern)))
+#
+#         if len(ft_model_path) == 0: continue
+#
+#         ft_model_path = ft_model_path[0]
+#
+#         configurations.append((ft_model_path, dist))
+#
+# test_models(
+#     configurations,
 #     2, "cuda",
 #     True, False,
 #     (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),
 # )
+
+# %%
+
+test_model(
+    Path("models/unet_logit_fusion_clim_soil_20260623_115621"),
+    "ID",
+    2, "cuda",
+    True, True, False,
+    (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),
+)
 
 # %%
 

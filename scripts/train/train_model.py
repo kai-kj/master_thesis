@@ -5,6 +5,7 @@ import time
 import torch
 import json
 
+from scripts.models.fusion import FusionModule
 from scripts.train.loss import FocalTverskyLoss
 from scripts.train.train import run_loop
 from scripts.dataset import DatasetTreeAI, make_base_train_augmentations_strong, make_base_test_augmentations
@@ -16,13 +17,49 @@ assert models_path.is_dir()
 
 device = torch.device("cuda")
 
+# %% fusion setup
+
+from dependencies.clim_soil_encoder.model import MLPModel
+
+use_clim = True
+use_soil = True
+
+fusion_model_path = {
+    (True, False): Path("models/mlp_clim_20260619_131123"),
+    (False, True): Path("models/mlp_soil_20260619_131725"),
+    (True, True): Path("models/mlp_clim_soil_20260619_132336"),
+}[(use_clim, use_soil)]
+
+fusion_model = MLPModel.load(fusion_model_path / "model.json", fusion_model_path / "model.pt")
+fusion_model.set_apply_softmax(False)
+
+# ---- none ----
+
+# fusion_mode = None
+# fusion_encoder = None
+
+# ---- concat ----
+
+# fusion_mode = "concat"
+# fusion_encoder = fusion_model.encoder.to(device)
+
+# ---- film ----
+
+fusion_mode = "film"
+fusion_encoder = fusion_model.encoder.to(device)
+
+# ---- logit ----
+
+# fusion_mode = "logit"
+# fusion_encoder = fusion_model.to(device)
+
 # %% model setup
 
 # ---- unet ----
 
 from scripts.models.unet_res import UNetRes
 
-model = UNetRes(10, "resnet34").to(device)
+model = UNetRes(10, "resnet34", fusion_mode=fusion_mode, fusion_encoder=fusion_encoder).to(device)
 model_name = "unet"
 num_epochs = 100
 batch_size = 16
@@ -97,34 +134,17 @@ optimizer_params = [
 #     {"params": model.get_head_parameters(), "lr": 1e-5},
 # ])
 
-
-# ---- fusion - none ----
-
-# return_clim = True
-# return_soil = False
-
-# ---- fusion - clim ----
-
-from dependencies.clim_soil_encoder.model import MLPModel
-
-fusion_model_path = Path("models/mlp_clim_20260619_131123")
-fusion_encoder = MLPModel.load(fusion_model_path / "model.json", fusion_model_path / "model.pt").encoder.to(device)
-
-model.add_fusion_encoder(fusion_encoder, device)
-
-optimizer_params += [
-    {"params": model.get_fusion_parameters(), "lr": 1e-4},
-    {"params": model.get_fusion_encoder_parameters(), "lr": 1e-5},
-]
-
-model_name = f"{model_name}_fusion_clim"
-
-return_clim = True
-return_soil = False
-
 # %% run
 
-dataset_train, dataset_valid = DatasetTreeAI("ID", "train", 0, return_clim=return_clim, return_soil=return_soil) \
+if fusion_mode is not None:
+    optimizer_params += [
+        {"params": model.get_fusion_parameters(), "lr": 1e-4},
+        {"params": model.get_fusion_encoder_parameters(), "lr": 1e-5},
+    ]
+
+    model_name += f"_{fusion_mode}_fusion" + "_clim" * use_clim + "_soil" * use_soil
+
+dataset_train, dataset_valid = DatasetTreeAI("ID", "train", 0, return_clim=use_clim, return_soil=use_soil) \
     .split(0.2, make_base_train_augmentations_strong(), make_base_test_augmentations(), 42)
 
 optimizer = torch.optim.AdamW(optimizer_params)

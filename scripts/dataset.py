@@ -33,6 +33,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
             indices: None | list[int] = None,
             return_clim: bool = False,
             return_soil: bool = False,
+            randomize_fusion: bool = False,
             augmentations: A.Compose | None = None,
     ):
         super(DatasetTreeAI, self).__init__()
@@ -48,7 +49,8 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         # for when calling .split()
         self._config = {
             "dist": dist, "train_or_test": train_or_test, "split_n": split_n,
-            "use_africa_labels": use_africa_labels, "return_clim": return_clim, "return_soil": return_soil,
+            "use_africa_labels": use_africa_labels,
+            "return_clim": return_clim, "return_soil": return_soil, "randomize_fusion": randomize_fusion,
         }
 
         self._treeai = TreeAISegmentation(self.TREEAI_SEGMENTATION_PATH)
@@ -101,6 +103,8 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
         assert (self.TREEAI_SEGMENTATION_PATH / "clim_soil_stats.json").exists()
         self._clim_soil_stats = json.loads((self.TREEAI_SEGMENTATION_PATH / "clim_soil_stats.json").read_text())
+
+        self._randomize_fusion = randomize_fusion
 
     def sample(self, n: int, replace: bool = False, random_state: int | None = None):
         self._patches = self._patches.sample(n, replace=replace, random_state=random_state)
@@ -177,7 +181,12 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
         x_tensor = torch.Tensor(x_array).permute(2, 0, 1)
         y_tensor = self._labels_lut[torch.Tensor(y_array).long()]
-        x_fusion_tensor = torch.Tensor((x_fusion_array - self._fusion_mean) / self._fusion_std)
+        # x_fusion_tensor = torch.Tensor((x_fusion_array - self._fusion_mean) / self._fusion_std)
+
+        x_fusion_tensor = \
+            torch.Tensor((x_fusion_array - self._fusion_mean) / self._fusion_std) \
+                if not self._randomize_fusion else \
+                torch.Tensor(np.random.normal(0.0, 1.0, x_fusion_array.shape))
 
         return x_tensor, x_fusion_tensor, y_tensor
 
@@ -239,7 +248,7 @@ def make_base_test_augmentations(
 # %%
 
 if __name__ == "__main__":
-    dataset = DatasetTreeAI("ID", "train", 0, return_clim=True)
+    dataset = DatasetTreeAI("ID", "train", 0, return_clim=True, randomize_fusion=True)
 
 # %%
 
