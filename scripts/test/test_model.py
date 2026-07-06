@@ -21,7 +21,7 @@ def test_model(
         model_path: Path, dist_name: str, batch_size: int, device: str,
         return_clim: bool, return_soil: bool, randomize_fusion: bool,
         x_mean: tuple[float, float, float], x_std: tuple[float, float, float],
-):
+) -> tuple[np.ndarray, np.ndarray, pd.DataFrame, pd.DataFrame]:
     print(f"testing {model_path.name} on {dist_name}")
 
     assert model_path.exists()
@@ -140,6 +140,8 @@ def test_model(
 
     metrics.to_csv(model_path / f"metrics_{dist_name.lower()}.csv", index=False)
 
+    return ys_true, ys_pred, confusion_matrix, metrics
+
 
 def test_models(
         model_dists: list[tuple[Path, str]], batch_size: int, device: str,
@@ -185,24 +187,24 @@ def test_models(
 
 # %%
 
-test_model(
-    Path("models/unet_logit_fusion_clim_soil_20260623_115621"),
-    "ID",
+res = test_model(
+    Path("models/swin_20260612_203922_south_africa_125_shot_20260706_132130"),
+    "south_africa",
     2, "cuda",
     True, True, False,
     (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),
 )
 
 # %%
-
+#
 # test_models(
 #     [
-#         (Path("models/unet_20260612_122705"), "ID"),
-#         (Path("models/deeplab_20260612_135725"), "ID"),
-#         (Path("models/segformer_20260612_145904"), "ID"),
-#         (Path("models/transunet_20260612_170208"), "ID"),
-#         (Path("models/swin_20260612_203922"), "ID"),
+#         (Path("models/segformer_20260612_145904_czechia_1_shot_20260706_111107"), "czechia"),
+#         (Path("models/segformer_20260612_145904_czechia_5_shot_20260706_111415"), "czechia"),
+#         (Path("models/segformer_20260612_145904_czechia_25_shot_20260706_111755"), "czechia"),
+#         (Path("models/segformer_20260612_145904_czechia_125_shot_20260706_112353"), "czechia"),
 #     ],
 #     2, "cuda",
+#     True, True, False,
 #     (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),
 # )

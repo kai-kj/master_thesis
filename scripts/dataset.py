@@ -247,30 +247,50 @@ def make_base_test_augmentations(
 
 # %%
 
-if __name__ == "__main__":
-    dataset = DatasetTreeAI("ID", "train", 0, return_clim=True, randomize_fusion=True)
+# if __name__ == "__main__":
+#     dataset = DatasetTreeAI("OOD_austria", "train", 0, return_clim=True, randomize_fusion=True)
+#     print(len(dataset))
 
 # %%
 
-# if __name__ == "__main__":
-#     dataset = DatasetTreeAI("ID", "train", 0)
-#     dataset_stats = dataset.calc_stats()
-#
-#     fig, ax = plt.subplots()
-#     ax.bar(range(len(dataset_stats[2])), list(dataset_stats[2].values()))
-#     ax.set_xticks(range(len(dataset_stats[2])), labels=dataset_stats[2].keys(), rotation=90)
-#     ax.set_ylabel("class occurrences")
-#     ax.spines[["right", "top"]].set_visible(False)
-#     fig.tight_layout()
-#     fig.show()
-#
-#     dataset_stats = {
-#         "x_mean": list(dataset_stats[0]),
-#         "x_std": list(dataset_stats[1]),
-#         "y_counts": dataset_stats[2],
-#     }
-#
-#     Path("data/dataset_stats.json").write_text(json.dumps(dataset_stats, indent=4))
+if __name__ == "__main__":
+    all_stats = {}
+
+    for dist in [
+        "ID",
+        "OOD_china", "OOD_czechia", "OOD_iran", "OOD_mexico", "OOD_russia", "OOD_austria",
+        "OOD_south_africa",
+    ]:
+        print(f"calculating {dist} stats")
+        dataset = DatasetTreeAI(dist, "train", 0, use_africa_labels=dist == "OOD_south_africa")
+        dataset_stats = dataset.calc_stats()
+
+        all_stats[dist.replace("OOD_", "")] = {
+            "x_mean": dataset_stats[0].tolist(),
+            "x_std": dataset_stats[1].tolist(),
+            "y_counts": dataset_stats[2],
+        }
+
+    Path("data/dataset_stats.json").write_text(json.dumps(all_stats, indent=4))
+
+    # dataset = DatasetTreeAI("ID", "train", 0)
+    # dataset_stats = dataset.calc_stats()
+    #
+    # fig, ax = plt.subplots()
+    # ax.bar(range(len(dataset_stats[2])), list(dataset_stats[2].values()))
+    # ax.set_xticks(range(len(dataset_stats[2])), labels=dataset_stats[2].keys(), rotation=90)
+    # ax.set_ylabel("class occurrences")
+    # ax.spines[["right", "top"]].set_visible(False)
+    # fig.tight_layout()
+    # fig.show()
+    #
+    # dataset_stats = {
+    #     "x_mean": list(dataset_stats[0]),
+    #     "x_std": list(dataset_stats[1]),
+    #     "y_counts": dataset_stats[2],
+    # }
+    #
+    # Path("data/dataset_stats.json").write_text(json.dumps(dataset_stats, indent=4))
 
 # %%
 

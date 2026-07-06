@@ -51,7 +51,7 @@ class SegFormer(Model):
 
         self.apply_softmax = apply_softmax
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, x_fusion: torch.Tensor | None = None) -> torch.Tensor:
         out = self.model(pixel_values=x)
 
         logits = torch.nn.functional.interpolate(

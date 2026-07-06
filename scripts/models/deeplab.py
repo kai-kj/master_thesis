@@ -38,7 +38,7 @@ class DeepLabV3Plus(Model):
 
         self.apply_softmax = apply_softmax
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, x_fusion: torch.Tensor | None = None) -> torch.Tensor:
         logits = self.model(x)
         return torch.nn.functional.softmax(logits, dim=1) if self.apply_softmax else logits
 

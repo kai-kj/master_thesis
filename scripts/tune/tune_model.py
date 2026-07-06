@@ -2,35 +2,37 @@
 
 from pathlib import Path
 import time
-import torch
 
-from scripts.train.loss import FocalTverskyLoss
+import torch
+import json
+
+from scripts.train.loss import FocalTverskyLoss, PerImageHallucinationLoss
 from scripts.train.train import run_loop
 from scripts.dataset import DatasetTreeAI, make_base_train_augmentations_weak, make_base_test_augmentations
 
 # %%
 
+dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
 device = torch.device("cuda")
 
 # %%
 
-for dist_name in ["china", "czechia", "iran", "mexico", "russia"]:
-    # for dist_name in ["china", "czechia", "iran", "mexico", "russia", "south_africa"]:
-    # for dist_name in ["south_africa"]:
-
+# for dist_name in ["china", "czechia", "iran", "mexico", "russia", "austria"]:
+# for dist_name in ["china", "czechia", "iran", "mexico", "russia", "austria", "south_africa"]:
+for dist_name in ["austria"]:
     sa = dist_name == "south_africa"
     mix_ratio = 1.0 if not sa else 0.0
 
     for k in [1, 5, 25, 125]:
-
+        # for k in [125]:
         print(f"==== training {dist_name} - {k} shot ====")
 
         dataset_train, dataset_valid = DatasetTreeAI(
-            f"OOD_{dist_name}", "train", 0, dist_name == "south_africa", return_clim=True, return_soil=False
+            f"OOD_{dist_name}", "train", 0, dist_name == "south_africa", return_clim=False, return_soil=False
         ).split(0.2, make_base_train_augmentations_weak(), make_base_test_augmentations(), 42)
 
         dataset_train_extra, _ = DatasetTreeAI(
-            f"ID", "train", 0, dist_name == "south_africa", return_clim=True, return_soil=False
+            f"ID", "train", 0, dist_name == "south_africa", return_clim=False, return_soil=False
         ).split(0.2, make_base_train_augmentations_weak(), make_base_test_augmentations(), 42)
 
         if k > len(dataset_train):
@@ -41,16 +43,16 @@ for dist_name in ["china", "czechia", "iran", "mexico", "russia"]:
 
         from scripts.models.unet_res import UNetRes
 
-        model_path = Path("models/unet_logit_fusion_clim_soil_20260623_115621")
+        model_path = Path("models/unet_20260612_122705")
         model = UNetRes.load(model_path / "model.json", model_path / "model.pt").to(device)
-        num_epochs = 50 if not sa else 75
+        num_epochs = 50
         batch_size = 16
-        lr_min = 1e-6 if not sa else 5e-6
+        lr_min = 1e-6 if not sa else 1e-5
 
         optimizer = torch.optim.AdamW([
-            {"params": model.get_encoder_parameters(), "lr": 1e-5 if not sa else 5e-5},
-            {"params": model.get_decoder_parameters(), "lr": 1e-4 if not sa else 5e-4},
-            {"params": model.get_head_parameters(), "lr": 1e-4 if not sa else 5e-4},
+            {"params": model.get_encoder_parameters(), "lr": 1e-5 if not sa else 1e-4},
+            {"params": model.get_decoder_parameters(), "lr": 1e-4 if not sa else 1e-3},
+            {"params": model.get_head_parameters(), "lr": 1e-4 if not sa else 1e-3},
         ])
 
         # ---- deeplab ----
@@ -62,12 +64,12 @@ for dist_name in ["china", "czechia", "iran", "mexico", "russia"]:
         #
         # num_epochs = 50
         # batch_size = 16
-        # lr_min = 1e-6
+        # lr_min = 1e-6 if not sa else 1e-5
         #
         # optimizer = torch.optim.AdamW([
-        #     {"params": model.get_encoder_parameters(), "lr": 1e-5},
-        #     {"params": model.get_decoder_parameters(), "lr": 1e-4},
-        #     {"params": model.get_head_parameters(), "lr": 1e-4},
+        #     {"params": model.get_encoder_parameters(), "lr": 1e-5 if not sa else 1e-4},
+        #     {"params": model.get_decoder_parameters(), "lr": 1e-4 if not sa else 1e-3},
+        #     {"params": model.get_head_parameters(), "lr": 1e-4 if not sa else 1e-3},
         # ])
 
         # ---- segformer ----
@@ -86,7 +88,7 @@ for dist_name in ["china", "czechia", "iran", "mexico", "russia"]:
         # ])
 
         # ---- transunet ----
-
+        #
         # from scripts.models.transunet import TransUNet
         #
         # model_path = Path("models/transunet_20260612_170208")

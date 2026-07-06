@@ -24,7 +24,7 @@ class Model(torch.nn.Module):
         config = json.loads(config_path.read_text())
         weights = torch.load(weights_path, weights_only=True)
 
-        if "fusion_encoder" in config:
+        if "fusion_encoder" in config and config["fusion_encoder"] is not None:
             config["fusion_encoder"] = FusionEncoder.from_config(config["fusion_encoder"])
 
         match config["name"]:

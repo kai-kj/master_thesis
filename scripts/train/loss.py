@@ -50,6 +50,18 @@ class FocalTverskyLoss(torch.nn.Module):
         return torch.pow(self.tversky(logits, target), self.gamma).mean()
 
 
+class PerImageHallucinationLoss(torch.nn.Module):
+    def __init__(self, base_loss: torch.nn.Module, lambda_absent: float = 0.1):
+        super().__init__()
+        self.base_loss = base_loss
+        self.lambda_absent = lambda_absent
+
+    def forward(self, logits: torch.Tensor, y_true: torch.Tensor):
+        gt = torch.stack([(y_true == c).any((1, 2)) for c in range(logits.shape[1])], dim=1).float()
+        pred = logits.softmax(1).amax((2, 3))
+        return self.base_loss(logits, y_true) + self.lambda_absent * (pred * (1 - gt)).mean()
+
+
 def calc_class_weights(class_counts: torch.Tensor, log_smooth: bool = True) -> torch.Tensor:
     zero_mask = class_counts == 0
 

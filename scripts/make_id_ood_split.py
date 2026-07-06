@@ -169,6 +169,7 @@ ood_country_province = [
     ("South Africa", "Limpopo"),
     ("China", "Anhui"),
     ("Russia", "Primor'ye"),
+    ("Austria", "Steiermark")
 ]
 
 sites_split_b = sites_split_a.copy()

@@ -91,7 +91,7 @@ class SwinFPN(Model):
         self.decoder = FPN(in_channels=SwinFPN.HIDDEN_SIZES[variant], fpn_dim=fpn_dim)
         self.head = torch.nn.Conv2d(fpn_dim, n_classes, kernel_size=1)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, x_fusion: torch.Tensor | None = None) -> torch.Tensor:
         features = list(self.encoder(pixel_values=x, output_hidden_states=True).reshaped_hidden_states)
         logits = self.head(self.decoder(features))
 

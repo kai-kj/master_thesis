@@ -87,7 +87,7 @@ def make_history_plot(model_path: Path, ax: Axes) -> tuple[float, float]:
 
 # %%
 
-model_path = Path("models/unet_film_fusion_clim_soil_20260623_152617")
+model_path = Path("models/unet_20260612_122705_austria_125_shot_20260706_155132")
 assert model_path.is_dir()
 
 fig, ax = plt.subplots(figsize=(8, 6))
