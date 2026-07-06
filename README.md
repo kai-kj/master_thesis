@@ -2,6 +2,21 @@
 
 Kai Kitagawa-Jones
 
+## Related repositories
+
+- [`kkitagawa/thesis`](https://gitlab.ethz.ch/kkitagawa/tree_segmentation): this repository, contains the core code for
+  the
+  thesis, mostly model definitions and train/eval scripts
+- [`kkitagawa/treeai_segmentation`](https://gitlab.ethz.ch/kkitagawa/treeai_segmentation): code related to creating a
+  semantic
+  segmentation version of the TreeAI dataset (eventually to be integrated into [
+  `ites-form/form-euler-dl`](https://gitlab.ethz.ch/ites-form/form-euler-dl))
+- [`kkitagawa/treeai_labels`](https://gitlab.ethz.ch/kkitagawa/treeai_labels): code related to parsing and creting a
+  phylogenetically organized/consistent summary of TreeAI labels
+- [`kkitagawa/clim_soil_encoder`](https://gitlab.ethz.ch/kkitagawa/clim_soil_encoder): code related to creating and
+  pre-training
+  climate and soil encoders
+
 ## Goal / research questions
 
 The overall goal of this project is to create tree genera semantic segmentation models on the TreeAI dataset. In
@@ -19,20 +34,31 @@ In terms of additional data sources, the following will be of focus:
 - Climate data: using WorldClim bioclimatic variables
 - Soil data: using Harmonized World Soil Database v2.0
 
-## Related repositories
+## Workflow
 
-- [`kkitagawa/thesis`](https://gitlab.ethz.ch/kkitagawa/tree_segmentation): this repository, contains the core code for
-  the
-  thesis, mostly model definitions and train/eval scripts
-- [`kkitagawa/treeai_segmentation`](https://gitlab.ethz.ch/kkitagawa/treeai_segmentation): code related to creating a
-  semantic
-  segmentation version of the TreeAI dataset (eventually to be integrated into [
-  `ites-form/form-euler-dl`](https://gitlab.ethz.ch/ites-form/form-euler-dl))
-- [`kkitagawa/treeai_labels`](https://gitlab.ethz.ch/kkitagawa/treeai_labels): code related to parsing and creting a
-  phylogenetically organized/consistent summary of TreeAI labels
-- [`kkitagawa/clim_soil_encoder`](https://gitlab.ethz.ch/kkitagawa/clim_soil_encoder): code related to creating and
-  pre-training
-  climate and soil encoders
+See [`workflow.pdf`](workflow.pdf) for a high-level overview of the workflow.
+
+## Models
+
+|            | category    | variant   | pre-training | #params |
+|------------|-------------|-----------|--------------|---------|
+| UNet       | CNN         | ResNet-34 | ImageNet-1k  | 24.44M  | 
+| DeepLabV3+ | CNN         | ResNet-34 | ImageNet-1k  | 22.44M  | 
+| Segformer  | transformer | b2        | ImageNet-1k  | 27.35M  | 
+| TransUNet  | hybrid      | b16       | ImageNet-21k | 92.31M  | 
+| SwinFPN    | hybrid      | base      | ImageNet-1k  | 89.60M  | 
+
+## Data splits/distributions
+
+- Core data (mainly Schwarzwald and Quebec) $\leftarrow$ makes up most of the data in terms of volume
+- OOD data
+    - Austria $\leftarrow$ from the Austria dataset (not TreeAI)
+    - China
+    - Czechia
+    - Iran
+    - Mexico
+    - Russia
+    - South Africa $\leftarrow$ uses completely different labels
 
 ## Code structure
 
