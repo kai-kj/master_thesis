@@ -158,42 +158,43 @@ def test_models(
 
 # %%
 
-# base_model_path = Path("models/unet_fusion_clim_20260621_102339")
-#
+base_model_path = Path("models/unet_20260612_122705")
+
 # dists = ["china", "czechia", "iran", "mexico", "russia"]
-# ks = [1, 5, 25, 125]
-#
-# configurations = [(base_model_path, "ID")]
-#
-# for dist in dists:
-#     configurations.append((base_model_path, dist))
-#
-#     for k in ks:
-#         ft_model_path_pattern = base_model_path.name + "_" + dist + "_" + str(k) + "_shot_*"
-#         ft_model_path = sorted(list(base_model_path.parent.glob(ft_model_path_pattern)))
-#
-#         if len(ft_model_path) == 0: continue
-#
-#         ft_model_path = ft_model_path[0]
-#
-#         configurations.append((ft_model_path, dist))
-#
-# test_models(
-#     configurations,
-#     2, "cuda",
-#     True, False,
-#     (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),
-# )
+dists = ["austria", "south_africa"]
+ks = [1, 5, 25, 125]
+
+configurations = [(base_model_path, "ID")]
+
+for dist in dists:
+    configurations.append((base_model_path, dist))
+
+    for k in ks:
+        ft_model_path_pattern = base_model_path.name + "_" + dist + "_" + str(k) + "_shot_*"
+        ft_model_path = sorted(list(base_model_path.parent.glob(ft_model_path_pattern)))
+
+        if len(ft_model_path) == 0: continue
+
+        ft_model_path = ft_model_path[0]
+
+        configurations.append((ft_model_path, dist))
+
+test_models(
+    configurations,
+    2, "cuda",
+    True, False, False,
+    (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),
+)
 
 # %%
 
-res = test_model(
-    Path("models/swin_20260612_203922_south_africa_125_shot_20260706_132130"),
-    "south_africa",
-    2, "cuda",
-    True, True, False,
-    (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),
-)
+# res = test_model(
+#     Path("models/swin_20260612_203922_south_africa_125_shot_20260706_132130"),
+#     "south_africa",
+#     2, "cuda",
+#     True, True, False,
+#     (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),
+# )
 
 # %%
 #

@@ -18,6 +18,7 @@ class DeepLabV3Plus(Model):
             variant: Literal["resnet18", "resnet34", "resnet50", "resnet101"] = "resnet34",
             apply_softmax: bool = False,
             get_weights: bool = True,
+            freeze_batchnorm: bool = False,
             **kwargs
     ):
         super().__init__()
@@ -37,6 +38,7 @@ class DeepLabV3Plus(Model):
         )
 
         self.apply_softmax = apply_softmax
+        self.freeze_batchnorm = freeze_batchnorm
 
     def forward(self, x: torch.Tensor, x_fusion: torch.Tensor | None = None) -> torch.Tensor:
         logits = self.model(x)
@@ -47,6 +49,16 @@ class DeepLabV3Plus(Model):
         deeplab = Model.load(config_path, weights_path)
         assert isinstance(deeplab, DeepLabV3Plus)
         return deeplab
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+
+        if mode and self.freeze_batchnorm:
+            for m in self.modules():
+                if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+                    m.eval()
+
+        return self
 
     def get_encoder_modules(self) -> list[torch.nn.Module]:
         return [self.model.encoder]

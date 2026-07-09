@@ -17,7 +17,7 @@ device = torch.device("cuda")
 
 # %%
 
-for dist_name in ["austria", "south_africa"]:
+for dist_name in ["south_africa"]:
     sa = dist_name == "south_africa"
     mix_ratio = 1.0 if not sa else 0.0
 

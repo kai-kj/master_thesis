@@ -3,9 +3,7 @@
 from pathlib import Path
 import time
 import torch
-import json
 
-from scripts.models.fusion import FusionModule
 from scripts.train.loss import FocalTverskyLoss
 from scripts.train.train import run_loop
 from scripts.dataset import DatasetTreeAI, make_base_train_augmentations_strong, make_base_test_augmentations
@@ -31,45 +29,34 @@ fusion_model_path = {
 }[(use_clim, use_soil)]
 
 fusion_model = MLPModel.load(fusion_model_path / "model.json", fusion_model_path / "model.pt")
-fusion_model.set_apply_softmax(False)
 
-# ---- none ----
+# ---- w/o fusion ----
 
-# fusion_mode = None
+# use_fusion = False
 # fusion_encoder = None
 
-# ---- concat ----
+# ---- w/ fusion ----
 
-# fusion_mode = "concat"
-# fusion_encoder = fusion_model.encoder.to(device)
-
-# ---- film ----
-
-fusion_mode = "film"
+use_fusion = True
 fusion_encoder = fusion_model.encoder.to(device)
-
-# ---- logit ----
-
-# fusion_mode = "logit"
-# fusion_encoder = fusion_model.to(device)
 
 # %% model setup
 
 # ---- unet ----
 
-from scripts.models.unet_res import UNetRes
-
-model = UNetRes(10, "resnet34", fusion_mode=fusion_mode, fusion_encoder=fusion_encoder).to(device)
-model_name = "unet"
-num_epochs = 100
-batch_size = 16
-lr_min = 1e-6
-
-optimizer_params = [
-    {"params": model.get_encoder_parameters(), "lr": 1e-5},
-    {"params": model.get_decoder_parameters(), "lr": 1e-4},
-    {"params": model.get_head_parameters(), "lr": 1e-4},
-]
+# from scripts.models.unet_res import UNetRes
+#
+# model = UNetRes(10, "resnet34", use_fusion=use_fusion, fusion_encoder=fusion_encoder).to(device)
+# model_name = "unet"
+# num_epochs = 100
+# batch_size = 16
+# lr_min = 1e-6
+#
+# optimizer_params = [
+#     {"params": model.get_encoder_parameters(), "lr": 1e-5},
+#     {"params": model.get_decoder_parameters(), "lr": 1e-4},
+#     {"params": model.get_head_parameters(), "lr": 1e-4},
+# ]
 
 # ---- deeplab ----
 
@@ -89,18 +76,18 @@ optimizer_params = [
 
 # ---- segformer ----
 
-# from scripts.models.segformer import SegFormer
-#
-# model = SegFormer(len(dataset_stats["y_counts"]), variant="b2").to(device)
-# model_name = "deeplab"
-# num_epochs = 100
-# batch_size = 4
-# lr_min = 1e-6
-#
-# optimizer = torch.optim.AdamW([
-#     {"params": model.get_encoder_parameters(), "lr": 1e-5},
-#     {"params": model.get_decoder_parameters(), "lr": 1e-4},
-# ])
+from scripts.models.segformer import SegFormer
+
+model = SegFormer(10, variant="b2", use_fusion=use_fusion, fusion_encoder=fusion_encoder).to(device)
+model_name = "segformer"
+num_epochs = 100
+batch_size = 4
+lr_min = 1e-6
+
+optimizer_params = [
+    {"params": model.get_encoder_parameters(), "lr": 1e-5},
+    {"params": model.get_decoder_parameters(), "lr": 1e-4},
+]
 
 # ---- transunet ----
 
@@ -136,13 +123,13 @@ optimizer_params = [
 
 # %% run
 
-if fusion_mode is not None:
+if use_fusion:
     optimizer_params += [
         {"params": model.get_fusion_parameters(), "lr": 1e-4},
         {"params": model.get_fusion_encoder_parameters(), "lr": 1e-5},
     ]
 
-    model_name += f"_{fusion_mode}_fusion" + "_clim" * use_clim + "_soil" * use_soil
+    model_name += f"_fusion" + "_clim" * use_clim + "_soil" * use_soil
 
 dataset_train, dataset_valid = DatasetTreeAI("ID", "train", 0, return_clim=use_clim, return_soil=use_soil) \
     .split(0.2, make_base_train_augmentations_strong(), make_base_test_augmentations(), 42)

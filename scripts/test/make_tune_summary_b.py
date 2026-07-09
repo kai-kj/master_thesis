@@ -10,14 +10,14 @@ from cycler import cycler
 
 base_model_paths = [
     ("UNet", Path("models/unet_20260612_122705")),
-    # ("UNet clim", Path("models/unet_20260612_122705")),
     ("DeepLabV3+", Path("models/deeplab_20260612_135725")),
-    ("Segformer", Path("models/segformer_20260612_145904")),
     ("TransUNet", Path("models/transunet_20260612_170208")),
     ("SwinFPN", Path("models/swin_20260612_203922")),
+    ("Segformer", Path("models/segformer_20260612_145904")),
+
 ]
 
-dist_names = ["china", "czechia", "iran", "mexico", "russia"]
+dist_names = ["austria", "china", "czechia", "iran", "mexico", "russia", "south_africa"]
 
 ks = [1, 5, 25, 125]
 

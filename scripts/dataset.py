@@ -140,6 +140,9 @@ class DatasetTreeAI(torch.utils.data.Dataset):
             pin_memory=True, num_workers=num_workers, prefetch_factor=prefetch_factor, persistent_workers=True
         )
 
+    def get_fusion_columns(self) -> list[str]:
+        return self._fusion_columns
+
     def calc_stats(self) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
         n_pixels = 0
         x_sum = np.zeros(3)

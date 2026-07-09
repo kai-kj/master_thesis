@@ -19,12 +19,11 @@ device = torch.device("cuda")
 
 # for dist_name in ["china", "czechia", "iran", "mexico", "russia", "austria"]:
 # for dist_name in ["china", "czechia", "iran", "mexico", "russia", "austria", "south_africa"]:
-for dist_name in ["austria"]:
+for dist_name in ["south_africa"]:
     sa = dist_name == "south_africa"
     mix_ratio = 1.0 if not sa else 0.0
 
     for k in [1, 5, 25, 125]:
-        # for k in [125]:
         print(f"==== training {dist_name} - {k} shot ====")
 
         dataset_train, dataset_valid = DatasetTreeAI(
@@ -41,10 +40,27 @@ for dist_name in ["austria"]:
 
         # ---- unet ----
 
-        from scripts.models.unet_res import UNetRes
+        # from scripts.models.unet_res import UNetRes
+        #
+        # model_path = Path("models/unet_20260612_122705")
+        # model = UNetRes.load(model_path / "model.json", model_path / "model.pt").to(device)
+        # num_epochs = 50
+        # batch_size = 16
+        # lr_min = 1e-6 if not sa else 1e-5
+        #
+        # optimizer = torch.optim.AdamW([
+        #     {"params": model.get_encoder_parameters(), "lr": 1e-5 if not sa else 1e-4},
+        #     {"params": model.get_decoder_parameters(), "lr": 1e-4 if not sa else 1e-3},
+        #     {"params": model.get_head_parameters(), "lr": 1e-4 if not sa else 1e-3},
+        # ])
 
-        model_path = Path("models/unet_20260612_122705")
-        model = UNetRes.load(model_path / "model.json", model_path / "model.pt").to(device)
+        # ---- deeplab ----
+
+        from scripts.models.deeplab import DeepLabV3Plus
+
+        model_path = Path("models/deeplab_20260612_135725")
+        model = DeepLabV3Plus.load(model_path / "model.json", model_path / "model.pt").to(device)
+
         num_epochs = 50
         batch_size = 16
         lr_min = 1e-6 if not sa else 1e-5
@@ -55,22 +71,8 @@ for dist_name in ["austria"]:
             {"params": model.get_head_parameters(), "lr": 1e-4 if not sa else 1e-3},
         ])
 
-        # ---- deeplab ----
-
-        # from scripts.models.deeplab import DeepLabV3Plus
-        #
-        # model_path = Path("models/deeplab_20260612_135725")
-        # model = DeepLabV3Plus.load(model_path / "model.json", model_path / "model.pt").to(device)
-        #
-        # num_epochs = 50
-        # batch_size = 16
-        # lr_min = 1e-6 if not sa else 1e-5
-        #
-        # optimizer = torch.optim.AdamW([
-        #     {"params": model.get_encoder_parameters(), "lr": 1e-5 if not sa else 1e-4},
-        #     {"params": model.get_decoder_parameters(), "lr": 1e-4 if not sa else 1e-3},
-        #     {"params": model.get_head_parameters(), "lr": 1e-4 if not sa else 1e-3},
-        # ])
+        if k == 1:
+            model.freeze_batchnorm = True
 
         # ---- segformer ----
 
