@@ -181,30 +181,42 @@ for country, province in ood_country_province:
 
 # %%
 
+site_names_map = {
+    "ID": "Core",
+    "OOD_austria": "Austria",
+    "OOD_china": "China",
+    "OOD_czechia": "Czechia",
+    "OOD_iran": "Iran",
+    "OOD_mexico": "Mexico",
+    "OOD_russia": "Russia",
+    "OOD_south_africa": "South Africa",
+}
+
 fig, ax = plt.subplots(figsize=(16, 8))
 
-countries.to_crs("EPSG:3857").plot(ax=ax, color="lightgray")
+countries[countries["NAME"] != "Antarctica"].to_crs("EPSG:8857").plot(ax=ax, color="lightgray")
 
 sites_split_b[sites_split_b["dist"] == "OOD"] \
-    .to_crs("EPSG:3857") \
+    .to_crs("EPSG:8857") \
     .centroid \
-    .plot(ax=ax, color="gray", marker="^", markersize=100, label="unused")
+    .plot(ax=ax, color="gray", marker=".", markersize=75, label="Unused")
 
 dists = sorted(list(set(sites_split_b["dist"].unique()) - {"OOD"}))
 colors = [get_hex(c) for c in get_colors(len(dists), pastel_factor=0, rng=0)]
 
 for dist, color in zip(dists, colors):
     sites_split_b[sites_split_b["dist"] == dist] \
-        .to_crs("EPSG:3857") \
+        .to_crs("EPSG:8857") \
         .centroid \
-        .plot(ax=ax, color=color, markersize=100, label=dist.replace("_", " "))
+        .plot(ax=ax, color=color, marker="o", markersize=75, label=site_names_map[dist])
 
 ax.axis("off")
-ax.set_xlim((-20000000, 20000000))
-ax.set_ylim((-20000000 * 0.4, 20000000 * 0.6))
-ax.legend(loc="lower left")
+ax.margins(0)
+# ax.set_xlim((-20000000, 20000000))
+# ax.set_ylim((-20000000 * 0.4, 20000000 * 0.6))
+ax.legend(loc="lower center", frameon=False, ncol=9)
 fig.tight_layout()
-fig.savefig("figures/id_ood_split_map.png")
+fig.savefig("figures/id_ood_split_map.png", dpi=300)
 fig.show()
 
 # %%

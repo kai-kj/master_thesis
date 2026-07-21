@@ -97,9 +97,11 @@ def make_site_summary(sites_source: pd.DataFrame, by: str, countries: list[str])
     return summary
 
 
-countries_all = [
+countries_all = {
+    "Austria",
     "Canada",
     "China",
+    "Czechia",
     "Finland",
     "Germany",
     "Iran",
@@ -113,71 +115,74 @@ countries_all = [
     "South Africa",
     "Spain",
     "Switzerland",
-    "Turkey",
-]
+    "Turkey"
+}
 
-countries_europe = [
-    # "Canada",
-    # "China",
+countries_europe = {
+    "Austria",
+    "Czechia",
     "Finland",
     "Germany",
-    # "Iran",
     "Italy",
-    # "Japan",
     "Lithuania",
-    # "Mexico",
     "Portugal",
-    # "Russia",
     "Slovakia",
-    # "South Africa",
     "Spain",
     "Switzerland",
-    # "Turkey",
-]
+}
 
-countries_other = [
-    # "Canada",
+countries_asia = {
     "China",
-    # "Finland",
-    # "Germany",
     "Iran",
-    # "Italy",
     "Japan",
-    # "Lithuania",
-    "Mexico",
-    # "Portugal",
     "Russia",
-    # "Slovakia",
-    # "South Africa",
-    # "Spain",
-    # "Switzerland",
-    # "Turkey",
-]
+    "Turkey"
+}
+
+countries_americas = {
+    "Canada",
+    "Mexico",
+}
+
+countries_africa = {
+    "South Africa",
+}
+
+assert len(countries_all - countries_europe - countries_asia - countries_americas - countries_africa) == 0
+
+countries_other = set(species_by_country["country"].unique()) - {"Germany", "Canada", "Portugal"}
 
 species_by_country_europe = species_by_country[species_by_country["country"].isin(countries_europe)]
 genus_by_country_europe = genus_by_country[genus_by_country["country"].isin(countries_europe)]
 
-species_by_country_canada = species_by_country[species_by_country["country"] == "Canada"]
-genus_by_country_canada = genus_by_country[genus_by_country["country"] == "Canada"]
+species_by_country_asia = species_by_country[species_by_country["country"].isin(countries_asia)]
+genus_by_country_asia = genus_by_country[genus_by_country["country"].isin(countries_asia)]
 
-species_by_country_other = species_by_country[species_by_country["country"].isin(countries_other)]
-genus_by_country_other = genus_by_country[genus_by_country["country"].isin(countries_other)]
+species_by_country_americas = species_by_country[species_by_country["country"].isin(countries_americas)]
+genus_by_country_americas = genus_by_country[genus_by_country["country"].isin(countries_americas)]
+
+species_by_country_africa = species_by_country[species_by_country["country"].isin(countries_asia)]
+genus_by_country_africa = genus_by_country[genus_by_country["country"].isin(countries_asia)]
 
 species_by_region = pd.concat([
     pd.DataFrame(species_by_country_europe.drop(columns=["country"]).sum(axis=0)),
-    pd.DataFrame(species_by_country_canada.drop(columns=["country"]).sum(axis=0)),
-    pd.DataFrame(species_by_country_other.drop(columns=["country"]).sum(axis=0)),
+    pd.DataFrame(species_by_country_asia.drop(columns=["country"]).sum(axis=0)),
+    pd.DataFrame(species_by_country_americas.drop(columns=["country"]).sum(axis=0)),
+    pd.DataFrame(species_by_country_africa.drop(columns=["country"]).sum(axis=0)),
 ], axis=1).transpose()
 
-species_by_region.insert(0, "region", ["Europe", "Canada", "Other"])
+species_by_region.insert(0, "region", ["Europe", "Asia", "Americas", "Africa"])
+species_by_region = species_by_region.fillna(0)
 
 genus_by_region = pd.concat([
     pd.DataFrame(genus_by_country_europe.drop(columns=["country"]).sum(axis=0)),
-    pd.DataFrame(genus_by_country_canada.drop(columns=["country"]).sum(axis=0)),
-    pd.DataFrame(genus_by_country_other.drop(columns=["country"]).sum(axis=0)),
+    pd.DataFrame(genus_by_country_asia.drop(columns=["country"]).sum(axis=0)),
+    pd.DataFrame(genus_by_country_americas.drop(columns=["country"]).sum(axis=0)),
+    pd.DataFrame(genus_by_country_africa.drop(columns=["country"]).sum(axis=0)),
 ], axis=1).transpose()
 
-genus_by_region.insert(0, "region", ["Europe", "Canada", "Other"])
+genus_by_region.insert(0, "region", ["Europe", "Asia", "Americas", "Africa"])
+genus_by_region = genus_by_region.fillna(0)
 
 
 # %%
@@ -200,31 +205,25 @@ def make_hist(ax: Axes, data: pd.DataFrame, cutoff: int = 10, legend_cols: int =
         bottom += row[1:]
 
     ax.set_xticks(xs, labels=data.columns[1:], rotation=label_rot)
+    plt.setp(ax.get_xticklabels(), ha="right")
+
     ax.set_yscale("log")
     ax.set_ylim(10, bottom.max())
     ax.spines[["right", "top"]].set_visible(False)
     ax.set_ylabel("total count")
 
-    if legend_cols > 0: ax.legend(loc="upper right", ncols=legend_cols)
+    if legend_cols > 0: ax.legend(loc="upper right", ncols=legend_cols, frameon=False)
 
 
-fig, ax = plt.subplots(2, 1, figsize=(12, 8))
-make_hist(ax[0], species_by_country_europe, label_rot=90, legend_cols=3)
-ax[0].set_title("By species")
-make_hist(ax[1], genus_by_country_europe, label_rot=90)
-ax[1].set_title("By genus")
+fig, ax = plt.subplots(2, 1, figsize=(12, 6))
+make_hist(ax[0], species_by_region, cutoff=100, label_rot=45, legend_cols=4)
+ax[0].set_title("Species distribution (excluding those with < 100 samples)")
+
+make_hist(ax[1], genus_by_region, cutoff=100, label_rot=45)
+ax[1].set_title("Genera distribution (excluding those with < 100 samples)")
+
 fig.tight_layout()
-fig.savefig("figures/species_genus_europe.png")
-fig.show()
-
-fig, ax = plt.subplots(2, 1, figsize=(12, 8))
-make_hist(ax[0], species_by_region, label_rot=90, legend_cols=3)
-ax[0].set_title("By species")
-make_hist(ax[1], genus_by_region, label_rot=90)
-ax[1].axhline([1000], color="orange", linestyle="dashed")
-ax[1].set_title("By genus")
-fig.tight_layout()
-fig.savefig("figures/species_genus_world.png")
+fig.savefig("figures/species_genus_comparison.png")
 fig.show()
 
 # %%

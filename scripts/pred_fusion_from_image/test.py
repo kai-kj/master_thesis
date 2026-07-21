@@ -68,26 +68,38 @@ ys_true = np.concatenate(ys_true, axis=0)
 
 # %%
 
-r2 = r2_score(ys_true, ys_pred)
-mae = mean_absolute_error(ys_true.reshape(-1), ys_pred.reshape(-1))
-rmse = root_mean_squared_error(ys_true.reshape(-1), ys_pred.reshape(-1))
+r2_each: np.ndarray = r2_score(ys_true, ys_pred, multioutput="raw_values")  # type: ignore
+mae_each: np.ndarray = mean_absolute_error(ys_true, ys_pred, multioutput="raw_values")  # type: ignore
+rmse_each: np.ndarray = root_mean_squared_error(ys_true, ys_pred, multioutput="raw_values")  # type: ignore
 
-print(f"R^2: {r2:.4f}")
-print(f"MAE: {mae:.4f}")
-print(f"RMSE: {rmse:.4f}")
+r2_mean = r2_each.mean().item()
+mae_mean = mae_each.mean().item()
+rmse_mean = rmse_each.mean().item()
+
+print(f"R^2: {r2_mean:.4f}")
+print(f"MAE: {mae_mean:.4f}")
+print(f"RMSE: {rmse_mean:.4f}")
 
 (model_path / "results.json").write_text(json.dumps(
     {
-        "r2": float(r2),
-        "mae": float(mae),
-        "rmse": float(rmse),
+        "r2": {
+            "each": {k: v for k, v in zip(dataset.get_fusion_columns(), r2_each.tolist())},
+            "average": r2_mean
+        },
+        "mae": {
+            "each": {k: v for k, v in zip(dataset.get_fusion_columns(), mae_each.tolist())},
+            "average": mae_mean
+        },
+        "rmse": {
+            "each": {k: v for k, v in zip(dataset.get_fusion_columns(), rmse_each.tolist())},
+            "average": rmse_mean
+        },
     },
     indent=4,
 ))
 
 # %%
 
-r2_each = r2_score(ys_true, ys_pred, multioutput="raw_values")
 
 fig, ax = plt.subplots(figsize=(6, 4))
 
