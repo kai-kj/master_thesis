@@ -14,5 +14,6 @@ __pycache__
 # other
 /models/
 /figures/
+/tables/
 /map.qgz
 /tmp/
