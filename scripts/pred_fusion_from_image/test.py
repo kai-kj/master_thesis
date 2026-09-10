@@ -13,7 +13,7 @@ from scripts.dataset import DatasetTreeAI, make_base_train_augmentations_strong,
 
 # %%
 
-model_path = Path("models/predictor_20260709_135554")
+model_path = Path("models/predictor_unfrozen_split_2_20260728_221759")
 assert model_path.is_dir()
 
 device = "cuda"

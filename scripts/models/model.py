@@ -22,7 +22,7 @@ class Model(torch.nn.Module):
         weights_path = Path(weights_path)
 
         config = json.loads(config_path.read_text())
-        weights = torch.load(weights_path, weights_only=True)
+        weights = torch.load(weights_path, weights_only=True, map_location="cpu")
 
         if config.get("fusion_encoder", None) is not None:
             config["fusion_encoder"] = MLPEncoder.from_config(config["fusion_encoder"])
@@ -84,6 +84,18 @@ class Model(torch.nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad) \
             if trainable_only \
             else sum(p.numel() for p in self.parameters())
+
+    def get_fusion_encoder_modules(self) -> list[torch.nn.Module]:
+        raise NotImplementedError
+
+    def get_fusion_modules(self) -> list[torch.nn.Module]:
+        raise NotImplementedError
+
+    def get_fusion_encoder_parameters(self) -> list[torch.nn.parameter.Parameter]:
+        raise NotImplementedError
+
+    def get_fusion_parameters(self) -> list[torch.nn.parameter.Parameter]:
+        raise NotImplementedError
 
     def export(self, path: str | Path, x: torch.Tensor) -> None:
         torch.onnx.export(

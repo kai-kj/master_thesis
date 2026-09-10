@@ -28,7 +28,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
 
     def __init__(
             self,
-            dist: str, train_or_test: str, split_n: int,
+            dist: str | None, train_or_test: str, split_n: int,
             use_africa_labels: bool = False,
             indices: None | list[int] = None,
             return_clim: bool = False,
@@ -42,7 +42,7 @@ class DatasetTreeAI(torch.utils.data.Dataset):
         assert self.SITE_SPLIT_PATH.exists()
         assert self.LABELS_MAP_PATH.exists()
         assert self.LABELS_MAP_PATH_AFRICA.exists()
-        assert dist.startswith("ID") or dist.startswith("OOD")
+        assert dist is None or dist.startswith("ID") or dist.startswith("OOD")
         assert train_or_test in ["train", "test"]
         assert split_n in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
@@ -77,7 +77,9 @@ class DatasetTreeAI(torch.utils.data.Dataset):
             .merge(clim_patches, on="subpatch_name") \
             .merge(soil_patches, on="subpatch_name")
 
-        self._patches = self._patches[self._patches["dist"] == dist]
+        if dist:
+            self._patches = self._patches[self._patches["dist"] == dist]
+
         self._patches = self._patches[self._patches[f"split_{split_n}"] == train_or_test]
 
         patches_columns = ["site_id", "crop_x0", "crop_x1", "crop_y0", "crop_y1", "path_x", "path_y"]

@@ -9,6 +9,7 @@ import seaborn as sns
 from tqdm import tqdm
 import pandas as pd
 import json
+import re
 
 from scripts.models.model import Model
 from scripts.dataset import DatasetTreeAI, make_base_test_augmentations
@@ -21,10 +22,18 @@ def test_model(
         model_path: Path, dist_name: str, batch_size: int, device: str,
         return_clim: bool, return_soil: bool, randomize_fusion: bool,
         x_mean: tuple[float, float, float], x_std: tuple[float, float, float],
-) -> tuple[np.ndarray, np.ndarray, pd.DataFrame, pd.DataFrame]:
+        skip_existing: bool = False, show_plots: bool = True,
+) -> tuple[np.ndarray, np.ndarray, pd.DataFrame, pd.DataFrame] | None:
     print(f"testing {model_path.name} on {dist_name}")
-
     assert model_path.exists()
+
+    preview_path = model_path / f"results_{dist_name.lower()}{"_rand" if randomize_fusion else ""}.png"
+    cm_path = model_path / f"confusion_matrix_{dist_name.lower()}{"_rand" if randomize_fusion else ""}.png"
+    metrics_path = model_path / f"metrics_{dist_name.lower()}{"_rand" if randomize_fusion else ""}.csv"
+
+    if metrics_path.exists() and skip_existing:
+        print(f"  skipping...")
+        return None
 
     seed(42)
 
@@ -81,8 +90,10 @@ def test_model(
     )
 
     fig.tight_layout()
-    fig.savefig(model_path / f"results_{dist_name.lower()}.png")
-    fig.show()
+    fig.savefig(preview_path)
+
+    if show_plots:
+        fig.show()
 
     ys_true = []
     ys_pred = []
@@ -116,8 +127,10 @@ def test_model(
     ax.set_ylabel("True label")
 
     fig.tight_layout()
-    fig.savefig(model_path / f"confusion_matrix_{dist_name.lower()}.png")
-    fig.show()
+    fig.savefig(cm_path)
+
+    if show_plots:
+        fig.show()
 
     metrics = []
 
@@ -138,7 +151,7 @@ def test_model(
 
     print(metrics)
 
-    metrics.to_csv(model_path / f"metrics_{dist_name.lower()}.csv", index=False)
+    metrics.to_csv(metrics_path, index=False)
 
     return ys_true, ys_pred, confusion_matrix, metrics
 
@@ -147,64 +160,101 @@ def test_models(
         model_dists: list[tuple[Path, str]], batch_size: int, device: str,
         return_clim: bool, return_soil: bool, randomize_fusion: bool,
         x_mean: tuple[float, float, float], x_std: tuple[float, float, float],
+        skip_existing: bool = False, show_plots: bool = True,
 ):
     for model_path, dist_name in model_dists:
         test_model(
             model_path, dist_name, batch_size, device,
             return_clim, return_soil, randomize_fusion,
-            x_mean, x_std
+            x_mean, x_std,
+            skip_existing, show_plots
         )
 
 
 # %%
 
-base_model_path = Path("models/unet_20260612_122705")
+base_model_paths = [
+    Path("models/unet_fusion_clim_soil_split_3_20260826_113723"),
+    Path("models/unet_fusion_clim_soil_split_4_20260826_124726"),
+    Path("models/segformer_fusion_clim_soil_split_3_20260826_160057"),
+    Path("models/segformer_fusion_clim_soil_split_4_20260826_135700"),
+]
 
-# dists = ["china", "czechia", "iran", "mexico", "russia"]
-dists = ["austria", "south_africa"]
+dists = ["austria", "china", "czechia", "iran", "mexico", "russia", "south_africa"]
+# dists = []
 ks = [1, 5, 25, 125]
 
-configurations = [(base_model_path, "ID")]
+for base_model_path in base_model_paths:
+    assert base_model_path.exists()
 
-for dist in dists:
-    configurations.append((base_model_path, dist))
+    configurations = [(base_model_path, "ID")]
 
-    for k in ks:
-        ft_model_path_pattern = base_model_path.name + "_" + dist + "_" + str(k) + "_shot_*"
-        ft_model_path = sorted(list(base_model_path.parent.glob(ft_model_path_pattern)))
+    for dist in dists:
+        configurations.append((base_model_path, dist))
 
-        if len(ft_model_path) == 0: continue
+        for k in ks:
+            ft_model_path_pattern = base_model_path.name + "_" + dist + "_" + str(k) + "_shot_*"
+            ft_model_path = sorted(list(base_model_path.parent.glob(ft_model_path_pattern)))
 
-        ft_model_path = ft_model_path[0]
+            if len(ft_model_path) == 0: continue
 
-        configurations.append((ft_model_path, dist))
+            ft_model_path = ft_model_path[0]
 
-test_models(
-    configurations,
-    2, "cuda",
-    True, False, False,
-    (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),
-)
+            configurations.append((ft_model_path, dist))
+
+    test_models(
+        configurations,
+        2, "cuda",
+        True, True, False,
+        (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),
+        skip_existing=True, show_plots=False,
+    )
+
+# %%
+
+# model_names = ["unet", "deeplab", "segformer", "transunet", "swin"]
+# splits = [3, 4]
+# dists = ["austria", "china", "czechia", "iran", "mexico", "russia", "south_africa"]
+# ks = [1, 5, 25, 125]
+#
+# for model_name in model_names:
+#     for split in splits:
+#         all_model_paths = list(Path("models").glob("*"))
+#
+#         base_model_paths = [p for p in all_model_paths if re.fullmatch(f"{model_name}_split_{split}_\\d+_\\d+", p.name)]
+#         assert len(base_model_paths) == 1
+#
+#         base_model_path = base_model_paths[0]
+#         assert base_model_path.exists()
+#
+#         configurations = [(base_model_path, "ID")]
+#
+#         for dist in dists:
+#             configurations.append((base_model_path, dist))
+#
+#             for k in ks:
+#                 ft_model_path_pattern = base_model_path.name + "_" + dist + "_" + str(k) + "_shot_*"
+#                 ft_model_path = sorted(list(base_model_path.parent.glob(ft_model_path_pattern)))
+#
+#                 if len(ft_model_path) == 0: continue
+#
+#                 ft_model_path = ft_model_path[0]
+#
+#                 configurations.append((ft_model_path, dist))
+#
+#         test_models(
+#             configurations,
+#             2, "cuda",
+#             True, False, False,
+#             (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),
+#             skip_existing=True, show_plots=False,
+#         )
 
 # %%
 
 # res = test_model(
-#     Path("models/swin_20260612_203922_south_africa_125_shot_20260706_132130"),
-#     "south_africa",
-#     2, "cuda",
-#     True, True, False,
-#     (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),
-# )
-
-# %%
-#
-# test_models(
-#     [
-#         (Path("models/segformer_20260612_145904_czechia_1_shot_20260706_111107"), "czechia"),
-#         (Path("models/segformer_20260612_145904_czechia_5_shot_20260706_111415"), "czechia"),
-#         (Path("models/segformer_20260612_145904_czechia_25_shot_20260706_111755"), "czechia"),
-#         (Path("models/segformer_20260612_145904_czechia_125_shot_20260706_112353"), "czechia"),
-#     ],
+#     Path("models/unet_split_0_20260612_122705"),
+#     "ID",
 #     2, "cuda",
 #     True, True, False,
 #     (0.485, 0.456, 0.406), (0.229, 0.224, 0.225),

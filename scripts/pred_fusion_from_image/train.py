@@ -11,23 +11,32 @@ from scripts.dataset import DatasetTreeAI, make_base_train_augmentations_strong,
 
 # %%
 
-base_mode_path = Path("models/unet_20260612_122705")
+base_mode_path = Path("models/unet_split_0_20260612_122705")
 assert base_mode_path.is_dir()
 
 device = "cuda"
 
 # %%
 
+freeze_encoder = False
+split = 0
+
 base_model = UNetRes.load(base_mode_path / "model.json", base_mode_path / "model.pt")
-model = UnetFusionPredictor(base_model, 16, freeze_encoder=True).to(device)
+model = UnetFusionPredictor(base_model, 16, freeze_encoder=freeze_encoder).to(device)
 
 # %%
 
-n_epochs = 25
+n_epochs = 20
 
-optimizer = torch.optim.AdamW([
-    {"params": model.head.parameters(), "lr": 1e-5},
-])
+if freeze_encoder:
+    optimizer = torch.optim.AdamW([
+        {"params": model.head.parameters(), "lr": 1e-5},
+    ])
+else:
+    optimizer = torch.optim.AdamW([
+        {"params": model.encoder.parameters(), "lr": 1e-6},
+        {"params": model.head.parameters(), "lr": 1e-5},
+    ])
 
 loss_fn = torch.nn.MSELoss()
 
@@ -35,7 +44,7 @@ batch_size = 16
 train_aug = make_base_train_augmentations_strong()
 test_aug = make_base_test_augmentations()
 
-dataset = DatasetTreeAI("ID", "train", 0, return_clim=True, return_soil=True)
+dataset = DatasetTreeAI("ID", "train", split, return_clim=True, return_soil=True)
 dataset_train, dataset_valid = dataset.split(0.2, train_aug, test_aug, 42)
 dataloader_train, dataloader_valid = dataset_train.loader(batch_size), dataset_valid.loader(batch_size)
 
@@ -87,7 +96,8 @@ for epoch in range(n_epochs):
 
     print(f"epoch {epoch + 1}/{n_epochs}: train loss: {train_loss:.4f} | valid loss: {valid_loss:.4f}")
 
-model_path = Path("models") / f"predictor_{time.strftime("%Y%m%d_%H%M%S")}"
+fstr = "frozen" if freeze_encoder else "unfrozen"
+model_path = Path("models") / f"predictor_{fstr}_split_{split}_{time.strftime("%Y%m%d_%H%M%S")}"
 model_path.mkdir(parents=True, exist_ok=True)
 model.save(model_path / "model.json", model_path / "model.pt")
 

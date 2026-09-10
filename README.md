@@ -1,42 +1,32 @@
-# Robust tree species identification using high-resolution RGB imagery and deep learning
+# Robust tree species semantic segmentation across geographic regions using RGB imagery and environmental data fusion
 
-Kai Kitagawa-Jones
+## Description
 
-## Related repositories
+This repository contains code for the main part of the thesis, in particular, the training and evaluation of the
+semantic segmentation models.
 
-- [`kkitagawa/thesis`](https://gitlab.ethz.ch/kkitagawa/tree_segmentation): this repository, contains the core code for
-  the
-  thesis, mostly model definitions and train/eval scripts
-- [`kkitagawa/treeai_segmentation`](https://gitlab.ethz.ch/kkitagawa/treeai_segmentation): code related to creating a
-  semantic
-  segmentation version of the TreeAI dataset (eventually to be integrated into [
-  `ites-form/form-euler-dl`](https://gitlab.ethz.ch/ites-form/form-euler-dl))
-- [`kkitagawa/treeai_labels`](https://gitlab.ethz.ch/kkitagawa/treeai_labels): code related to parsing and creting a
-  phylogenetically organized/consistent summary of TreeAI labels
-- [`kkitagawa/clim_soil_encoder`](https://gitlab.ethz.ch/kkitagawa/clim_soil_encoder): code related to creating and
-  pre-training
-  climate and soil encoders
+## Structure
 
-## Goal / research questions
-
-The overall goal of this project is to create tree genera semantic segmentation models on the TreeAI dataset. In
-particular, the comparison between _in-distribution_ (ID) and _out-of-distribution_ (OOD) performance is explored.
-
-The following are the main research questions:
-
-1. Among CNN, ViT, and CNN-ViT hybrid architectures, which achieve the best ID performance for TS semantic segmentation?
-2. Among CNN, ViT, and CNN-ViT hybrid architectures, which generalize best to OOD data, both with and without
-   fine-tuning on a subset of the OOD data?
-3. For both ID and OOD settings, which additional data sources, if any, lead to the greatest performance gains?
-
-In terms of additional data sources, the following will be of focus:
-
-- Climate data: using WorldClim bioclimatic variables
-- Soil data: using Harmonized World Soil Database v2.0
-
-## Workflow
-
-See [`workflow.pdf`](workflow.pdf) for a high-level overview of the workflow.
+```
+thesis/                     |
+├─ data                     | small intermediate data, produced by the numbered scripts in scripts/
+│ ├─ dataset_stats.json     | general stats used for standardization etc
+│ ├─ labels_map.csv         | mapping from TreeAI labels to the smaller subset used in theis
+│ ├─ labels_map_africa.csv  | same as above, but for S. Africa, which has a different set
+│ └─ sites_split.gpkg       | train-test-val split version of the data
+├─ dependencies/            | git submodules
+│ ├─ clim_soil_encoder/     | -> git@gitlab.ethz.ch:kkitagawa/clim_soil_encoder.git
+│ ├─ TransUNet/             | -> https://github.com/Beckschen/TransUNet.git
+│ ├─ treeai_labels/         | -> git@gitlab.ethz.ch:kkitagawa/treeai_labels.git
+│ └─ treeai_segmentation/   | -> git@gitlab.ethz.ch:kkitagawa/treeai_segmentation.git
+├─ figures/                 | figures produced for the thesis
+├─ tables/                  | latex tables produced for the thesis
+├─ scripts/                 | the main scripts for the project, see below for details
+├─ tasks/                   | for running tasks overnight / on Euler
+├─ run_tasks.sh             | iterate through each script in tasks/ and run it
+├─ workflow.pdf             | a extract from the bi-weekly presentation, about the general workflow
+└─ ...                      |
+```
 
 ## Models
 
@@ -60,27 +50,31 @@ See [`workflow.pdf`](workflow.pdf) for a high-level overview of the workflow.
     - Russia
     - South Africa $\leftarrow$ uses completely different labels
 
-## Code structure
+## Usage
 
-Last update: 2026-07-06
+To install dependencies and set up the python environment, run `uv sync`.
 
-```
-thesis/                         ║
-├─ data/                        ║ any intermediate data (this excludes the main TreeAI data, or anything really big)
-├─ dependencies/                ║ various external dependencies
-├─ figures/                     ║ output for figures
-├─ models/                      ║ output for models
-│  ├─ ${MODEL_NAME}_${DATATIME} ║   one folder per model
-│  │  ├─ model.json             ║      model config
-│  │  ├─ model.pt               ║      model weights
-│  │  ├─ history.csv            ║      training history (including: loss, lr, confusion matrices, ...)
-│  │  ├─ loss.png               ║      training loss plot
-│  │  ├─ metrics_${DIST}.csv    ║      metrics for each target distribution
-│  │  ├─ results_${DIST}.png    ║      results for each target distribution
-│  │  └─ ...                    ║ (other misc files)
-│  └─ ...                       ║ (more models)
-├─ scripts/                     ║ scripts for processing data and training/evaluating models
-├─ tasks/                       ║ for queing up batches of tasks to run overnight / on Euler
-├─ run_tasks.sh                 ║ iterate through each script in tasks/ and run it
-└─ ...                          ║ (other stuff)
-```
+To setup all required intermediate data, run the numbered scripts in `scripts/` in numerical order. After this point,
+any of the scripts can be run as seen fit (however, the test scripts obviously need a model to be trained first).
+
+The following are the main scripts of interest:
+
+- `models/*`: model definitions, not really intended to be run directly, but they do contain some test code
+- `train/train_model.py`: train any model, including with/without fusion
+- `tune/tune_model.py`: tune any model, again, including with/without fusion
+- `test/test_model.py`: test a trained model on the test set, and make useful plots and tables
+- `pred_fusion_from_image/*`: scripts related to predicting the environmental variables from RGB images
+- `monitor.py`: a script to monitor the training progress of a model
+- `dataset.py`: the main dataset class, which handles all data loading and preprocessing
+- `make_report_plots.py`: make more polished plots (and latex tables) for the thesis
+- `make_report_samples.py`: make the plots showing representative samples from each model/site
+
+The approach taken to train/eval multiple models is to copy over `train/train_model.py` (or equivalent) into `tasks/`,
+and rename it according to what exactly to do. Then, just modify the config parts of the scripts and run
+`run_tasks.sh`.
+
+All model classes inherit from the `Model` class (`scripts/models/model.py`), which also handles automatic model
+loading. Therefore, for testing etc, just call `Model.load_model()` and pass the model path. All data related to a model
+is stored within a specified folder, including plots specific to that model.
+
+See `workflow.pdf` for a high-level overview of the workflow.

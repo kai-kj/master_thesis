@@ -16,6 +16,16 @@ from scripts.dataset import DatasetTreeAI, make_base_test_augmentations
 
 device = torch.device("cpu")
 
+plt.rcParams.update({
+    "font.family": "Arial",
+    "font.size": 8,
+    "axes.labelsize": 8,
+    "axes.titlesize": 8,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "legend.fontsize": 8,
+})
+
 
 # %%
 
@@ -27,8 +37,11 @@ def make_preview(
     img_size = 2.5
 
     fig, ax = plt.subplots(
-        len(sample_idxs), len(models) + 2,
-        figsize=((len(models) + 2) * img_size, len(sample_idxs) * img_size)
+        len(sample_idxs), len(models) + 3,
+        figsize=((len(models) + 2.25) * img_size, len(sample_idxs) * img_size),
+        gridspec_kw={
+            "width_ratios": [1, 1, 0.25] + [1] * len(models)
+        },
     )
 
     for i, sample_idx in enumerate(sample_idxs):
@@ -44,24 +57,26 @@ def make_preview(
         ax[i, 1].imshow(y_true_np, vmin=-1, vmax=max(dataset.label_id_to_name.keys()), cmap="Accent")
         ax[i, 1].axis("off")
 
+        ax[i, 2].axis("off")
+
         if i == 0:
-            ax[i, 0].set_title("input", fontsize=16)
-            ax[i, 1].set_title("ground truth output", fontsize=16)
+            ax[i, 0].set_title("input", fontsize=18)
+            ax[i, 1].set_title("ground truth", fontsize=18)
 
         for j, (model_name, model) in enumerate(models.items()):
             model.eval()
             y_pred = model(x.to(device).unsqueeze(0), None).squeeze(0)
             y_pred_np = y_pred.cpu().detach().numpy().transpose(1, 2, 0).argmax(2)[:, :, np.newaxis]
 
-            ax[i, j + 2].imshow(y_pred_np, vmin=-1, vmax=max(dataset.label_id_to_name.keys()), cmap="Accent")
-            ax[i, j + 2].axis("off")
+            ax[i, j + 3].imshow(y_pred_np, vmin=-1, vmax=max(dataset.label_id_to_name.keys()), cmap="Accent")
+            ax[i, j + 3].axis("off")
 
-            if i == 0: ax[i, j + 2].set_title(f"{model_name} output", fontsize=16)
+            if i == 0: ax[i, j + 3].set_title(f"{model_name}", fontsize=18)
 
         if add_sample_names:
             ax[i, 0].text(
                 -0.1, 0.5, f"sample {sample_idxs[i]}",
-                transform=ax[i, 0].transAxes, rotation=90, va="center", ha="center", fontsize=16
+                transform=ax[i, 0].transAxes, rotation=90, va="center", ha="center", fontsize=18
             )
 
     fig.tight_layout()
@@ -75,11 +90,11 @@ def make_preview(
 # %%
 
 core_model_paths = {
-    "UNet": Path("models/unet_20260612_122705"),
-    "DeepLabV3+": Path("models/deeplab_20260612_135725"),
-    "Segformer": Path("models/segformer_20260612_145904"),
-    "TransUNet": Path("models/transunet_20260612_170208"),
-    "SwinFPN": Path("models/swin_20260612_203922"),
+    "UNet": Path("models/unet_split_0_20260612_122705"),
+    "DeepLabV3+": Path("models/deeplab_split_0_20260612_135725"),
+    "Segformer": Path("models/segformer_split_0_20260612_145904"),
+    "TransUNet": Path("models/transunet_split_0_20260612_170208"),
+    "SwinFPN": Path("models/swin_split_0_20260612_203922"),
 }
 
 core_models = {
@@ -142,10 +157,12 @@ for dist_name, indices in dist_names.items():
 
 # %%
 
-
 fig, ax = plt.subplots(
-    len(dist_names), len(core_model_paths) + 2,
-    figsize=((len(core_model_paths) + 2) * 2.5, len(dist_names) * 2.5)
+    len(dist_names), len(core_model_paths) + 3,
+    figsize=((len(core_model_paths) + 2.25) * 2.5, len(dist_names) * 2.5),
+    gridspec_kw={
+        "width_ratios": [1, 1, 0.25] + [1] * len(core_model_paths)
+    },
 )
 
 for i, (dist_name, sample_idxs) in enumerate(dist_names.items()):
@@ -168,9 +185,11 @@ for i, (dist_name, sample_idxs) in enumerate(dist_names.items()):
     ax[i, 1].imshow(y_true_np, vmin=-1, vmax=max(dataset.label_id_to_name.keys()), cmap="Accent")
     ax[i, 1].axis("off")
 
+    ax[i, 2].axis("off")
+
     if i == 0:
-        ax[i, 0].set_title("input", fontsize=16)
-        ax[i, 1].set_title("ground truth output", fontsize=16)
+        ax[i, 0].set_title("input", fontsize=18)
+        ax[i, 1].set_title("ground truth", fontsize=18)
 
     for j, (model_name, core_model_path) in enumerate(core_model_paths.items()):
         ft_model_path = None
@@ -188,16 +207,17 @@ for i, (dist_name, sample_idxs) in enumerate(dist_names.items()):
         y_pred = model(x.to(device).unsqueeze(0), None).squeeze(0)
         y_pred_np = y_pred.cpu().detach().numpy().transpose(1, 2, 0).argmax(2)[:, :, np.newaxis]
 
-        ax[i, j + 2].imshow(y_pred_np, vmin=-1, vmax=max(dataset.label_id_to_name.keys()), cmap="Accent")
-        ax[i, j + 2].axis("off")
+        ax[i, j + 3].imshow(y_pred_np, vmin=-1, vmax=max(dataset.label_id_to_name.keys()), cmap="Accent")
+        ax[i, j + 3].axis("off")
 
-        if i == 0: ax[i, j + 2].set_title(f"{model_name} output", fontsize=16)
+        if i == 0: ax[i, j + 3].set_title(f"{model_name}", fontsize=18)
 
     ax[i, 0].text(
         -0.1, 0.5, dist_name.replace("_", " "),
-        transform=ax[i, 0].transAxes, rotation=90, va="center", ha="center", fontsize=16
+        transform=ax[i, 0].transAxes, rotation=90, va="center", ha="center", fontsize=18
     )
 
 fig.tight_layout()
+
 fig.savefig(Path("figures/preview_all.png"))
 fig.show()

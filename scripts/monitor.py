@@ -6,10 +6,22 @@ from matplotlib.axes import Axes
 import pandas as pd
 import numpy as np
 
+from scripts.colors import palette
+
+plt.rcParams.update({
+    "font.family": "Arial",
+    "font.size": 8,
+    "axes.labelsize": 8,
+    "axes.titlesize": 8,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "legend.fontsize": 8,
+})
+
 
 # %%
 
-def make_history_plot(model_path: Path, ax: Axes) -> tuple[float, float]:
+def make_history_plot(model_path: Path, ax: Axes, show_best: bool = True) -> tuple[float, float]:
     history: pd.DataFrame = None  # type: ignore
 
     if (model_path / "loss.csv").exists():
@@ -52,20 +64,21 @@ def make_history_plot(model_path: Path, ax: Axes) -> tuple[float, float]:
     p1, = ax1.plot(epochs, history["lr"], color=next(cc), linestyle=":", label="learning rate")
     p2, = ax2.plot(epochs, history["train_loss"], color=next(cc), linestyle="--", label="train loss")
     p3, = ax2.plot(epochs, history["valid_loss"], color=next(cc), linestyle="--", label="valid loss")
-    p4, = ax3.plot(epochs, f1_weighted, color=next(cc), label="f1 score")
-    p5, = ax3.plot(epochs, iou_weighted, color=next(cc), label="iou score")
+    p4, = ax3.plot(epochs, f1_weighted, color=next(cc), label="valid F1 score")
+    p5, = ax3.plot(epochs, iou_weighted, color=next(cc), label="valid IoU score")
 
-    min_loss, min_loss_e = float(history["valid_loss"].min()), float(history["valid_loss"].argmin()) + 1
-    ax2.scatter(min_loss_e, min_loss, color="k", marker="^", zorder=10)
-    ax2.text(min_loss_e, min_loss + 0.002 * min_loss, f"{min_loss:.02f}", color="k", zorder=10)
+    if show_best:
+        min_loss, min_loss_e = float(history["valid_loss"].min()), float(history["valid_loss"].argmin()) + 1
+        ax2.scatter(min_loss_e, min_loss, color="k", marker="^", zorder=10)
+        ax2.text(min_loss_e, min_loss + 0.002 * min_loss, f"{min_loss:.02f}", color="k", zorder=10)
 
-    min_f1, min_f1_e = float(f1_weighted.max()), float(f1_weighted.argmax()) + 1
-    ax3.scatter(min_f1_e, min_f1, color="k", marker="^", zorder=10)
-    ax3.text(min_f1_e, min_f1 + 0.02 * min_f1, f"{min_f1:.02f}", color="k", zorder=10)
+        min_f1, min_f1_e = float(f1_weighted.max()), float(f1_weighted.argmax()) + 1
+        ax3.scatter(min_f1_e, min_f1, color="k", marker="^", zorder=10)
+        ax3.text(min_f1_e, min_f1 + 0.02 * min_f1, f"{min_f1:.02f}", color="k", zorder=10)
 
-    min_iou, min_iou_e = float(iou_weighted.max()), float(iou_weighted.argmax()) + 1
-    ax3.scatter(min_iou_e, min_iou, color="k", marker="^", zorder=10)
-    ax3.text(min_iou_e, min_iou + 0.02 * min_iou, f"{min_iou:.02f}", color="k", zorder=10)
+        min_iou, min_iou_e = float(iou_weighted.max()), float(iou_weighted.argmax()) + 1
+        ax3.scatter(min_iou_e, min_iou, color="k", marker="^", zorder=10)
+        ax3.text(min_iou_e, min_iou + 0.02 * min_iou, f"{min_iou:.02f}", color="k", zorder=10)
 
     ax1.legend(handles=[p2, p3, p4, p5, p1], loc="upper right", ncols=3, frameon=False)
 
@@ -87,12 +100,12 @@ def make_history_plot(model_path: Path, ax: Axes) -> tuple[float, float]:
 
 # %%
 
-model_path = Path("models/deeplab_fusion_clim_soil_20260708_134235")
+model_path = Path("models/transunet_split_0_20260612_170208")
 assert model_path.is_dir()
 
-fig, ax = plt.subplots(figsize=(8, 6))
+fig, ax = plt.subplots(figsize=(8, 3), dpi=300)
 
-make_history_plot(model_path, ax)
+make_history_plot(model_path, ax, False)
 
 fig.tight_layout()
 fig.savefig(model_path / "loss.png")

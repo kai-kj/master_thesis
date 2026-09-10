@@ -11,6 +11,17 @@ from distinctipy import get_colors, get_hex
 
 from dependencies.treeai_segmentation.treeai_segmentation import TreeAISegmentation
 from dependencies.treeai_labels.treeai_labels import load_labels as treeai_load_labels
+from scripts.colors import palette
+
+plt.rcParams.update({
+    "font.family": "Arial",
+    "font.size": 8,
+    "axes.labelsize": 8,
+    "axes.titlesize": 8,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "legend.fontsize": 8,
+})
 
 # %% setup
 
@@ -194,14 +205,14 @@ def make_hist(ax: Axes, data: pd.DataFrame, cutoff: int = 10, legend_cols: int =
         columns=[k for k, v in data.iloc[:, 1:].sum(axis=0).items() if v <= cutoff]
     )
 
-    ax.set_prop_cycle(cycler(color=[get_hex(c) for c in get_colors(data.shape[0], pastel_factor=0.5, rng=0)]))
+    # ax.set_prop_cycle(cycler(color=[get_hex(c) for c in get_colors(data.shape[0], pastel_factor=0.5, rng=0)]))
 
     xs = np.arange(data.shape[1] - 1)
     bottom = np.zeros_like(xs)
 
-    for _, row in data.iterrows():
+    for i, (_, row) in enumerate(data.iterrows()):
         row = row.tolist()
-        ax.bar(xs, row[1:], bottom=bottom, label=row[0])
+        ax.bar(xs, row[1:], bottom=bottom, label=row[0], color=palette(data.shape[0], i, 0.5))
         bottom += row[1:]
 
     ax.set_xticks(xs, labels=data.columns[1:], rotation=label_rot)
@@ -212,19 +223,27 @@ def make_hist(ax: Axes, data: pd.DataFrame, cutoff: int = 10, legend_cols: int =
     ax.spines[["right", "top"]].set_visible(False)
     ax.set_ylabel("total count")
 
-    if legend_cols > 0: ax.legend(loc="upper right", ncols=legend_cols, frameon=False)
+    if legend_cols > 0: ax.legend(loc="upper right", ncols=legend_cols, frameon=False, columnspacing=1)
 
 
-fig, ax = plt.subplots(2, 1, figsize=(12, 6))
-make_hist(ax[0], species_by_region, cutoff=100, label_rot=45, legend_cols=4)
-ax[0].set_title("Species distribution (excluding those with < 100 samples)")
-
-make_hist(ax[1], genus_by_region, cutoff=100, label_rot=45)
-ax[1].set_title("Genera distribution (excluding those with < 100 samples)")
-
+fig, ax = plt.subplots(figsize=(8, 2.5), dpi=300)
+make_hist(ax, species_by_region, cutoff=100, label_rot=60, legend_cols=4)
 fig.tight_layout()
-fig.savefig("figures/species_genus_comparison.png")
+fig.savefig("figures/species_genus_comparison_a.png")
 fig.show()
+
+fig, ax = plt.subplots(figsize=(8, 2), dpi=300)
+make_hist(ax, genus_by_region, cutoff=100, label_rot=60)
+fig.tight_layout()
+fig.savefig("figures/species_genus_comparison_b.png")
+fig.show()
+
+# make_hist(ax[1], genus_by_region, cutoff=100, label_rot=60)
+# ax[1].set_title("Genera distribution (excluding those with < 100 samples)")
+#
+# fig.tight_layout()
+# fig.savefig("figures/species_genus_comparison.png")
+# fig.show()
 
 # %%
 

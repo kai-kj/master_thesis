@@ -181,6 +181,13 @@ for country, province in ood_country_province:
 
 # %%
 
+pretrain_patches_path = Path("/home/kai/Thesis/data/treeai_segmentation/patches_pretrain_y.gpkg")
+assert pretrain_patches_path.is_file()
+
+pretrain_patches = gpd.read_file(pretrain_patches_path)
+
+# %%
+
 site_names_map = {
     "ID": "Core",
     "OOD_austria": "Austria",
@@ -192,9 +199,14 @@ site_names_map = {
     "OOD_south_africa": "South Africa",
 }
 
-fig, ax = plt.subplots(figsize=(16, 8))
+fig, ax = plt.subplots(figsize=(16, 8), dpi=300)
 
 countries[countries["NAME"] != "Antarctica"].to_crs("EPSG:8857").plot(ax=ax, color="lightgray")
+
+pretrain_patches \
+    .to_crs("EPSG:8857") \
+    .centroid \
+    .plot(ax=ax, color="darksalmon", marker=".", markersize=5, alpha=0.25, label="Pretrain")
 
 sites_split_b[sites_split_b["dist"] == "OOD"] \
     .to_crs("EPSG:8857") \
@@ -214,7 +226,7 @@ ax.axis("off")
 ax.margins(0)
 # ax.set_xlim((-20000000, 20000000))
 # ax.set_ylim((-20000000 * 0.4, 20000000 * 0.6))
-ax.legend(loc="lower center", frameon=False, ncol=9)
+# ax.legend(loc="lower center", frameon=False, ncol=9)
 fig.tight_layout()
 fig.savefig("figures/id_ood_split_map.png", dpi=300)
 fig.show()

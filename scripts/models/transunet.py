@@ -21,7 +21,7 @@ class TransUNet(Model):
         "h14": "ViT-H_14",
     }
 
-    WEIGHTS_PATH = Path("/home/kai/Thesis/model_weights/")
+    WEIGHTS_PATH = Path("/home/kai/Thesis/data/transunet/")
 
     def __init__(
             self,

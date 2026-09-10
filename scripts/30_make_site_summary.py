@@ -9,6 +9,16 @@ import pandas as pd
 from scripts.dataset import DatasetTreeAI
 from dependencies.treeai_segmentation.treeai_segmentation import TreeAISegmentation
 
+plt.rcParams.update({
+    "font.family": "Arial",
+    "font.size": 8,
+    "axes.labelsize": 8,
+    "axes.titlesize": 8,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "legend.fontsize": 8,
+})
+
 # %%
 
 sites_path = Path("data/sites_split.gpkg")
@@ -90,13 +100,16 @@ for i, dist in enumerate(dataset_names.keys()):
     stats: dict[str, int] = trees[trees["dist"] == dist]["model_label_name"].value_counts().to_dict()  # type: ignore
     labels = labels_main if dist != "OOD_south_africa" else labels_africa
 
-    fig, ax = plt.subplots(figsize=(4, 3))
+    fig, ax = plt.subplots(figsize=(2, 2), dpi=300)
 
     ax.bar(labels, [stats.get(l, 0) for l in labels])  # type: ignore
-    ax.set_xticks(range(len(labels)), labels, rotation=45)
+    ax.set_xticks(range(len(labels)), labels, rotation=40)
     plt.setp(ax.get_xticklabels(), ha="right")
     ax.spines[["top", "right"]].set_visible(False)
     ax.set_ylabel("occurrences")
+
+    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    ax.tick_params(axis="y", labelrotation=90)
 
     fig.subplots_adjust(left=0.2, right=0.95, bottom=0.3, top=0.9)
     fig.savefig(f"figures/site_summary_{dist}.png")

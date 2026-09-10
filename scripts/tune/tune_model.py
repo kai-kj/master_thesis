@@ -6,7 +6,7 @@ import time
 import torch
 import json
 
-from scripts.train.loss import FocalTverskyLoss, PerImageHallucinationLoss
+from scripts.train.loss import FocalTverskyLoss
 from scripts.train.train import run_loop
 from scripts.dataset import DatasetTreeAI, make_base_train_augmentations_weak, make_base_test_augmentations
 
@@ -15,11 +15,14 @@ from scripts.dataset import DatasetTreeAI, make_base_train_augmentations_weak, m
 dataset_stats = json.loads(Path("data/dataset_stats.json").read_text())
 device = torch.device("cuda")
 
+use_clim = False
+use_soil = False
+
+split = 1
+
 # %%
 
-# for dist_name in ["china", "czechia", "iran", "mexico", "russia", "austria"]:
-# for dist_name in ["china", "czechia", "iran", "mexico", "russia", "austria", "south_africa"]:
-for dist_name in ["south_africa"]:
+for dist_name in ["austria", "china", "czechia", "iran", "mexico", "russia", "south_africa"]:
     sa = dist_name == "south_africa"
     mix_ratio = 1.0 if not sa else 0.0
 
@@ -27,11 +30,11 @@ for dist_name in ["south_africa"]:
         print(f"==== training {dist_name} - {k} shot ====")
 
         dataset_train, dataset_valid = DatasetTreeAI(
-            f"OOD_{dist_name}", "train", 0, dist_name == "south_africa", return_clim=False, return_soil=False
+            f"OOD_{dist_name}", "train", split, dist_name == "south_africa", return_clim=use_clim, return_soil=use_soil
         ).split(0.2, make_base_train_augmentations_weak(), make_base_test_augmentations(), 42)
 
         dataset_train_extra, _ = DatasetTreeAI(
-            f"ID", "train", 0, dist_name == "south_africa", return_clim=False, return_soil=False
+            f"ID", "train", split, dist_name == "south_africa", return_clim=False, return_soil=False
         ).split(0.2, make_base_train_augmentations_weak(), make_base_test_augmentations(), 42)
 
         if k > len(dataset_train):
@@ -39,55 +42,55 @@ for dist_name in ["south_africa"]:
             continue
 
         # ---- unet ----
-
+        #
         # from scripts.models.unet_res import UNetRes
         #
-        # model_path = Path("models/unet_20260612_122705")
+        # model_path = Path("models/unet_split_1_20260721_094120")
         # model = UNetRes.load(model_path / "model.json", model_path / "model.pt").to(device)
         # num_epochs = 50
         # batch_size = 16
         # lr_min = 1e-6 if not sa else 1e-5
         #
-        # optimizer = torch.optim.AdamW([
+        # optimizer_params = [
         #     {"params": model.get_encoder_parameters(), "lr": 1e-5 if not sa else 1e-4},
         #     {"params": model.get_decoder_parameters(), "lr": 1e-4 if not sa else 1e-3},
         #     {"params": model.get_head_parameters(), "lr": 1e-4 if not sa else 1e-3},
-        # ])
+        # ]
 
         # ---- deeplab ----
 
-        from scripts.models.deeplab import DeepLabV3Plus
-
-        model_path = Path("models/deeplab_20260612_135725")
-        model = DeepLabV3Plus.load(model_path / "model.json", model_path / "model.pt").to(device)
-
-        num_epochs = 50
-        batch_size = 16
-        lr_min = 1e-6 if not sa else 1e-5
-
-        optimizer = torch.optim.AdamW([
-            {"params": model.get_encoder_parameters(), "lr": 1e-5 if not sa else 1e-4},
-            {"params": model.get_decoder_parameters(), "lr": 1e-4 if not sa else 1e-3},
-            {"params": model.get_head_parameters(), "lr": 1e-4 if not sa else 1e-3},
-        ])
-
-        if k == 1:
-            model.freeze_batchnorm = True
+        # from scripts.models.deeplab import DeepLabV3Plus
+        #
+        # model_path = Path("models/deeplab_split_1_20260721_105505")
+        # model = DeepLabV3Plus.load(model_path / "model.json", model_path / "model.pt").to(device)
+        #
+        # num_epochs = 50
+        # batch_size = 16
+        # lr_min = 1e-6 if not sa else 1e-5
+        #
+        # optimizer_params = [
+        #     {"params": model.get_encoder_parameters(), "lr": 1e-5 if not sa else 1e-4},
+        #     {"params": model.get_decoder_parameters(), "lr": 1e-4 if not sa else 1e-3},
+        #     {"params": model.get_head_parameters(), "lr": 1e-4 if not sa else 1e-3},
+        # ]
+        #
+        # if k == 1:
+        #     model.freeze_batchnorm = True
 
         # ---- segformer ----
 
         # from scripts.models.segformer import SegFormer
         #
-        # model_path = Path("models/segformer_20260612_145904")
+        # model_path = Path("models/segformer_split_1_20260721_115617")
         # model = SegFormer.load(model_path / "model.json", model_path / "model.pt").to(device)
         # num_epochs = 50
         # batch_size = 4
         # lr_min = 1e-7 if not sa else 5e-7
         #
-        # optimizer = torch.optim.AdamW([
+        # optimizer_params = [
         #     {"params": model.get_encoder_parameters(), "lr": 1e-6 if not sa else 5e-6},
         #     {"params": model.get_decoder_parameters(), "lr": 1e-5 if not sa else 5e-5},
-        # ])
+        # ]
 
         # ---- transunet ----
         #
@@ -99,27 +102,27 @@ for dist_name in ["south_africa"]:
         # batch_size = 2
         # lr_min = 1e-7 if not sa else 5e-7
         #
-        # optimizer = torch.optim.AdamW([
+        # optimizer_params = [
         #     {"params": model.get_encoder_parameters(), "lr": 1e-6 if not sa else 5e-6},
         #     {"params": model.get_decoder_parameters(), "lr": 1e-5 if not sa else 5e-5},
         #     {"params": model.get_head_parameters(), "lr": 1e-5 if not sa else 5e-5},
-        # ])
+        # ]
 
         # ---- swin ----
 
-        # from scripts.models.swin_fpn import SwinFPN
-        #
-        # model_path = Path("models/swin_20260612_203922")
-        # model = SwinFPN.load(model_path / "model.json", model_path / "model.pt").to(device)
-        # num_epochs = 50
-        # batch_size = 4
-        # lr_min = 1e-8 if not sa else 5e-8
-        #
-        # optimizer = torch.optim.AdamW([
-        #     {"params": model.get_encoder_parameters(), "lr": 1e-7 if not sa else 5e-7},
-        #     {"params": model.get_decoder_parameters(), "lr": 1e-6 if not sa else 5e-6},
-        #     {"params": model.get_head_parameters(), "lr": 1e-6 if not sa else 5e-6},
-        # ])
+        from scripts.models.swin_fpn import SwinFPN
+
+        model_path = Path("models/swin_split_1_20260721_173913")
+        model = SwinFPN.load(model_path / "model.json", model_path / "model.pt").to(device)
+        num_epochs = 50
+        batch_size = 4
+        lr_min = 1e-8 if not sa else 5e-8
+
+        optimizer_params = [
+            {"params": model.get_encoder_parameters(), "lr": 1e-7 if not sa else 5e-7},
+            {"params": model.get_decoder_parameters(), "lr": 1e-6 if not sa else 5e-6},
+            {"params": model.get_head_parameters(), "lr": 1e-6 if not sa else 5e-6},
+        ]
 
         # ---- run ----
 
@@ -131,6 +134,14 @@ for dist_name in ["south_africa"]:
         if sa:
             print(f"changing n_classes to {n_classes}")
             model.change_n_classes(n_classes)
+
+        if use_clim or use_soil:
+            optimizer_params += [
+                {"params": model.get_fusion_parameters(), "lr": 1e-4},
+                {"params": model.get_fusion_encoder_parameters(), "lr": 1e-5},
+            ]
+
+        optimizer = torch.optim.AdamW(optimizer_params)
 
         run_loop(
             device, model, optimizer,
